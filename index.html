@@ -1,0 +1,707 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <link rel="manifest" href="manifest.json">
+  <link rel="apple-touch-icon" href="icons/icon-192.png">
+  <title>棒球比賽紀錄器 PWA</title>
+  <style>
+    :root{
+      --bg:#1B3B2A;
+      --panel:#2C2C29;
+      --text:#F9F9F4;
+      --btn:#D0D3D4;
+      --btnfg:#111;
+      --btnactive:#B5BABB;
+      --off:#4A4A42;
+      --s-on:#FFEB3B; /* S 黃 */
+      --b-on:#6BE870; /* B 綠 */
+      --o-on:#FF6E6E; /* O 紅 */
+      --tbl:#3a3a36;
+    }
+    html,body{margin:0;padding:0;background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,"Segoe UI",Roboto,"Noto Sans",sans-serif;}
+    .wrap{max-width:980px;margin:0 auto;padding:12px;}
+    .panel{background:var(--panel);border-radius:14px;padding:12px;box-shadow:0 6px 20px rgba(0,0,0,.25);}
+    .row{display:flex;align-items:center;gap:10px;flex-wrap:wrap;}
+    .topbar{justify-content:space-between}
+    h1{font-size:20px;margin:0}
+    .info{opacity:.9}
+    .btn{background:var(--btn);color:var(--btnfg);border:none;border-radius:10px;padding:10px 12px;font-weight:600;cursor:pointer}
+    .btn:active{background:var(--btnactive)}
+    .grid{display:grid;gap:10px}
+    .scorebox{border:1px solid #6A6F68;border-radius:10px;padding:10px 12px}
+    .center{display:flex;justify-content:center;align-items:center}
+    .lights-row{display:flex;align-items:center;gap:8px;margin:8px 0}
+    .light{width:26px;height:26px;border-radius:50%;background:var(--off);}
+    .light.clear{outline:2px dashed #666;outline-offset:3px;display:none;}
+    .label{font-weight:700;width:22px;text-align:center}
+    .bases{position:relative;width:240px;height:200px;background:var(--panel)}
+    .base{position:absolute;width:16px;height:16px;background:var(--off)}
+    .b1{left:190px;top:100px}
+    .b2{left:120px;top:30px}
+    .b3{left:50px;top:100px}
+    .home{position:absolute;left:120px;top:170px;width:24px;height:18px;background:white;clip-path:polygon(50% 100%, 0 0, 100% 0)}
+    .pitchbox{display:flex;align-items:center;gap:8px}
+    .pitch{font-size:18px;font-weight:800}
+    .endbanner{color:var(--o-on);font-weight:900;font-size:18px;text-align:center;min-height:26px}
+    .hidden{display:none !important;}
+    .mono{font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;}
+    .sep{height:8px}
+    .scoretbl{width:100%;border-collapse:collapse}
+    .scoretbl th,.scoretbl td{padding:8px 6px}
+    .scoretbl th{font-size:16px}
+    .scoretbl .points{font-size:22px;font-weight:900;color:var(--b-on)}
+
+    /* 賽前設定：左先攻、右先守 */
+    .setup{position:fixed;inset:0;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;z-index:50;}
+    .setup .card{width:min(680px,92vw);background:var(--panel);border-radius:16px;padding:18px;box-shadow:0 10px 30px rgba(0,0,0,.5)}
+    .setup h2{margin:0 0 8px 0}
+    .setup .subtle{opacity:.85;font-size:13px;margin:0 0 14px 0}
+    .teams-flex{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+    .teamcard{border:1px solid #555;border-radius:12px;padding:12px}
+    .teamcard h4{margin:0 0 8px 0}
+    .fld{display:flex;flex-direction:column;gap:6px}
+    .fld input{padding:10px 12px;border-radius:10px;border:1px solid #5e5e58;background:#222;color:var(--text)}
+    .hint{opacity:.8;font-size:12px;margin-top:6px}
+    .actbar{display:flex;justify-content:flex-end;margin-top:14px}
+
+    /* 動作按鈕 */
+    .actions-rows{display:grid;gap:12px}
+    .actions-rows .line{display:flex;gap:10px}
+    .btn.circle{width:64px;height:64px;border-radius:50%;font-size:16px;font-weight:800}
+    .btn.square{border-radius:12px;min-width:120px}
+    .muted{opacity:.85}
+
+    /* 逐球紀錄表 */
+    .logwrap{margin-top:12px}
+    .loghead{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
+    .logtbl{width:100%;border-collapse:collapse;border:1px solid var(--tbl)}
+    .logtbl th,.logtbl td{border-bottom:1px solid var(--tbl);padding:8px 10px;text-align:center}
+    .logtbl th{position:sticky;top:0;background:#242420}
+    .logtbl .inning{width:64px}
+    .logtbl .score{width:92px;font-weight:800}
+    .logbox{max-height:320px;overflow:auto;border:1px solid var(--tbl);border-radius:12px}
+  </style>
+</head>
+<body>
+<div class="wrap">
+  <div class="panel">
+    <div class="row topbar">
+      <div>
+        <h1 id="banner"></h1>
+        <div id="info" class="info"></div>
+      </div>
+      <div class="row" style="gap:8px">
+        <button id="btnReset" class="btn muted">重新設定</button>
+        <button id="btnEdit" class="btn">編輯</button>
+      </div>
+    </div>
+
+    <div class="row" style="margin-top:10px;gap:20px">
+      <div>
+        <!-- SBO -->
+        <div class="lights-row" id="rowS">
+          <div class="light clear" id="clearS" title="清空好球"></div>
+          <div class="label">S</div>
+          <div class="light" data-s="1"></div>
+          <div class="light" data-s="2"></div>
+        </div>
+        <div class="lights-row" id="rowB">
+          <div class="light clear" id="clearB" title="清空壞球"></div>
+          <div class="label">B</div>
+          <div class="light" data-b="1"></div>
+          <div class="light" data-b="2"></div>
+          <div class="light" data-b="3"></div>
+        </div>
+        <div class="lights-row" id="rowO">
+          <div class="light clear" id="clearO" title="清空出局燈"></div>
+          <div class="label">O</div>
+          <div class="light" data-o="1"></div>
+          <div class="light" data-o="2"></div>
+        </div>
+      </div>
+
+      <div class="bases panel center">
+        <div class="base b1" id="b1"></div>
+        <div class="base b2" id="b2"></div>
+        <div class="base b3" id="b3"></div>
+        <div class="home"></div>
+      </div>
+    </div>
+
+    <div class="row" style="margin-top:8px;justify-content:space-between">
+      <div class="pitchbox">
+        <div id="pitch" class="pitch mono"></div>
+        <button id="pMinus" class="btn hidden">-</button>
+        <button id="pPlus" class="btn hidden">+</button>
+      </div>
+      <div style="min-width:260px" class="scorebox">
+        <div id="gameover" class="endbanner"></div>
+        <table class="scoretbl">
+          <thead><tr><th>隊伍</th><th>分數</th></tr></thead>
+          <tbody>
+            <tr><td id="teamA"></td><td id="scoreA" class="points">0</td></tr>
+            <tr><td id="teamB"></td><td id="scoreB" class="points">0</td></tr>
+          </tbody>
+        </table>
+        <div id="scoreAdjust" class="row hidden" style="margin-top:6px">
+          <button id="sMinus" class="btn">-</button>
+          <button id="sPlus"  class="btn">+</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="sep"></div>
+
+    <!-- 四排按鈕 -->
+    <div class="panel">
+      <div class="actions-rows">
+        <div class="line">
+          <button class="btn circle act" data-act="strike">好球</button>
+          <button class="btn circle act" data-act="ball">壞球</button>
+        </div>
+        <div class="line">
+          <button class="btn square act" data-act="ground">滾地球</button>
+          <button class="btn square act" data-act="fly">高飛球</button>
+        </div>
+        <div class="line">
+          <button class="btn square act" data-act="hit-1">一壘安打</button>
+          <button class="btn square act" data-act="hit-2">二壘安打</button>
+          <button class="btn square act" data-act="hit-3">三壘安打</button>
+        </div>
+        <div class="line">
+          <button class="btn square act" data-act="hbp">觸身球</button>
+          <button class="btn square act" data-act="hit-4">全壘打</button>
+          <button class="btn square act" data-act="grd">場地規則</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 逐球紀錄 -->
+    <div class="logwrap">
+      <div class="loghead">
+        <h3 style="margin:0">逐球紀錄</h3>
+        <div class="row">
+          <button id="btnExport" class="btn">匯出 CSV</button>
+          <button id="btnClearLog" class="btn muted">清除紀錄</button>
+        </div>
+      </div>
+      <div class="logbox">
+        <table class="logtbl" id="logTable">
+          <thead>
+            <tr>
+              <th class="inning">局數</th>
+              <th id="thTeamL">（左）投手</th>
+              <th id="thTeamR">（右）投手</th>
+              <th class="score">比分</th>
+            </tr>
+          </thead>
+          <tbody id="logBody"></tbody>
+        </table>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- 賽前設定覆蓋頁：左先攻、右先守 -->
+<div id="setup" class="setup hidden">
+  <div class="card">
+    <h2>賽前設定</h2>
+    <p class="subtle">請輸入兩隊名稱並指定左側為「先攻」、右側為「先守」。</p>
+    <div class="teams-flex">
+      <div class="teamcard">
+        <h4>左：先攻隊伍</h4>
+        <div class="fld">
+          <label for="inTeamOff">隊名</label>
+          <input id="inTeamOff" placeholder="先攻隊伍">
+        </div>
+        <div class="hint">此隊在每局上半進攻、下半守備。</div>
+      </div>
+      <div class="teamcard">
+        <h4>右：先守隊伍</h4>
+        <div class="fld">
+          <label for="inTeamDef">隊名</label>
+          <input id="inTeamDef" placeholder="先守隊伍">
+        </div>
+        <div class="hint">此隊在每局上半守備、下半進攻。</div>
+      </div>
+    </div>
+    <div class="actbar">
+      <button id="btnSetupStart" class="btn">開始比賽</button>
+    </div>
+  </div>
+</div>
+
+<script>
+(function(){
+  const S_ON = getComputedStyle(document.documentElement).getPropertyValue('--s-on').trim();
+  const B_ON = getComputedStyle(document.documentElement).getPropertyValue('--b-on').trim();
+  const O_ON = getComputedStyle(document.documentElement).getPropertyValue('--o-on').trim();
+  const OFF  = getComputedStyle(document.documentElement).getPropertyValue('--off').trim();
+
+  // 狀態：左(teamL)=先攻、右(teamR)=先守
+  const state = {
+    teamL: localStorage.getItem('teamL') || '先攻隊伍',
+    teamR: localStorage.getItem('teamR') || '先守隊伍',
+    inning: parseInt(localStorage.getItem('inning')||'1',10),
+    top: (localStorage.getItem('top')||'1') === '1',   // true: 上半
+    strike: 0, ball: 0, out: 0,
+    pitch_team: {},
+    score: {},
+    bases: [false,false,false],
+    edit_mode: false,
+    game_over: false,
+    logs: loadJSON('logs_v2') || {timeline: []}
+  };
+
+  // DOM
+  const el = {
+    banner: document.getElementById('banner'),
+    info: document.getElementById('info'),
+    btnEdit: document.getElementById('btnEdit'),
+    btnReset: document.getElementById('btnReset'),
+    rowS: document.getElementById('rowS'),
+    rowB: document.getElementById('rowB'),
+    rowO: document.getElementById('rowO'),
+    b1: document.getElementById('b1'),
+    b2: document.getElementById('b2'),
+    b3: document.getElementById('b3'),
+    pitch: document.getElementById('pitch'),
+    pMinus: document.getElementById('pMinus'),
+    pPlus: document.getElementById('pPlus'),
+    teamA: document.getElementById('teamA'),
+    teamB: document.getElementById('teamB'),
+    scoreA: document.getElementById('scoreA'),
+    scoreB: document.getElementById('scoreB'),
+    gameover: document.getElementById('gameover'),
+    scoreAdjust: document.getElementById('scoreAdjust'),
+    sMinus: document.getElementById('sMinus'),
+    sPlus: document.getElementById('sPlus'),
+    setup: document.getElementById('setup'),
+    inTeamOff: document.getElementById('inTeamOff'),
+    inTeamDef: document.getElementById('inTeamDef'),
+    btnSetupStart: document.getElementById('btnSetupStart'),
+    thTeamL: document.getElementById('thTeamL'),
+    thTeamR: document.getElementById('thTeamR'),
+    logBody: document.getElementById('logBody'),
+    btnExport: document.getElementById('btnExport'),
+    btnClearLog: document.getElementById('btnClearLog')
+  };
+
+  // 初始化分數與投球數
+  const L = state.teamL, R = state.teamR;
+  state.pitch_team[L] = parseInt(localStorage.getItem('pitch_'+L) || '0',10);
+  state.pitch_team[R] = parseInt(localStorage.getItem('pitch_'+R) || '0',10);
+  state.score[L] = parseInt(localStorage.getItem('score_'+L) || '0',10);
+  state.score[R] = parseInt(localStorage.getItem('score_'+R) || '0',10);
+
+  // 首次進入或尚未設定隊名 → 開啟設定
+  if(!localStorage.getItem('teamL') || !localStorage.getItem('teamR')) openSetup();
+
+  // 顯示隊名
+  el.teamA.textContent = state.teamL;
+  el.teamB.textContent = state.teamR;
+  el.thTeamL.textContent = state.teamL + '（投手）';
+  el.thTeamR.textContent = state.teamR + '（投手）';
+
+  /* 小工具 */
+  function saveBasics(){
+    localStorage.setItem('teamL', state.teamL);
+    localStorage.setItem('teamR', state.teamR);
+    localStorage.setItem('pitch_'+state.teamL, state.pitch_team[state.teamL]);
+    localStorage.setItem('pitch_'+state.teamR, state.pitch_team[state.teamR]);
+    localStorage.setItem('score_'+state.teamL, state.score[state.teamL]);
+    localStorage.setItem('score_'+state.teamR, state.score[state.teamR]);
+    localStorage.setItem('inning', state.inning);
+    localStorage.setItem('top', state.top ? '1' : '0');
+  }
+  function saveLogs(){ saveJSON('logs_v2', state.logs); }
+  function addPitch(defTeam){ state.pitch_team[defTeam] += 1; }
+  function clearCounts(){ state.strike = 0; state.ball = 0; }
+
+  function currentOffense(){ return state.top ? state.teamL : state.teamR; }
+  function currentDefense(){ return state.top ? state.teamR : state.teamL; }
+
+  function labelForAct(act){
+    switch(act){
+      case 'strike': return '好球';
+      case 'ball': return '壞球';
+      case 'ground': return '滾地球';
+      case 'fly': return '高飛球';
+      case 'hbp': return '觸身球';
+      case 'grd': return '場地規則';
+      case 'hit-1': return '一壘安打';
+      case 'hit-2': return '二壘安打';
+      case 'hit-3': return '三壘安打';
+      case 'hit-4': return '全壘打';
+      case 'bb': return '保送';
+      default: return act;
+    }
+  }
+
+  /* 逐球紀錄 */
+  function logEvent(actLabel){
+    const entry = {
+      inning: state.inning,
+      half: state.top ? '上' : '下',
+      pitcherTeam: currentDefense(), // 用隊名
+      label: actLabel,
+      scoreL: state.score[state.teamL],
+      scoreR: state.score[state.teamR]
+    };
+    state.logs.timeline.push(entry);
+    saveLogs();
+    renderLogTable();
+  }
+
+  function renderLogTable(){
+    const byInning = {};
+    for(const e of state.logs.timeline){
+      const key = e.inning;
+      byInning[key] ||= {L:[], R:[]};
+      (e.pitcherTeam === state.teamL ? byInning[key].L : byInning[key].R).push(e);
+    }
+    const keys = Object.keys(byInning).map(Number).sort((a,b)=>a-b);
+    let html = '';
+    for(const k of keys){
+      const Lseq = byInning[k].L, Rseq = byInning[k].R;
+      const maxLen = Math.max(Lseq.length, Rseq.length);
+      for(let i=0;i<maxLen;i++){
+        const Lev = Lseq[i], Rev = Rseq[i];
+        const scoreStr = Rev ? `${Rev.scoreL}:${Rev.scoreR}` : (Lev ? `${Lev.scoreL}:${Lev.scoreR}` : '');
+        html += `<tr>
+          <td class="inning">${k}</td>
+          <td>${Lev ? esc(Lev.label) : 'X'}</td>
+          <td>${Rev ? esc(Rev.label) : 'X'}</td>
+          <td class="score">${scoreStr}</td>
+        </tr>`;
+      }
+    }
+    el.logBody.innerHTML = html || `<tr><td colspan="4" style="opacity:.7">尚無紀錄</td></tr>`;
+    document.getElementById('thTeamL').textContent = state.teamL + '（投手）';
+    document.getElementById('thTeamR').textContent = state.teamR + '（投手）';
+  }
+
+  /* 終局判斷（下半 walk-off） */
+  function maybeWalkoff(scoreAdded){
+    if(scoreAdded && !state.top && state.inning >= 9){
+      if(state.score[currentOffense()] > state.score[currentDefense()]){
+        endGame(); return true;
+      }
+    }
+    return false;
+  }
+
+  function endGame(){
+    state.game_over = true;
+    el.gameover.textContent = "比賽結束！";
+    el.pitch.textContent = `PITCH  ${state.teamL}: ${state.pitch_team[state.teamL]}  |  ${state.teamR}: ${state.pitch_team[state.teamR]}`;
+    saveBasics();
+    updateAll();
+  }
+
+  /* 半局切換（修正：不會在 8下→9上時提早結束；下半開始時才檢查主隊已領先而省略該下半） */
+  function changeSide(){
+    if(state.game_over) return;
+
+    // 清半局狀態
+    state.out = 0; state.strike = 0; state.ball = 0; state.bases = [false,false,false];
+
+    if(state.top){
+      // 上半打完 → 進入下半（不在這裡結束）
+      state.top = false;
+
+      // 到「下半開始時」才判斷是否已分出勝負（9局含延長）
+      if(state.inning >= 9){
+        if(state.score[currentOffense()] > state.score[currentDefense()]){
+          endGame(); return;
+        }
+      }
+
+    }else{
+      // 下半打完 → 視情況結束或進入下一局
+      const finishedInning = state.inning;
+
+      // 回到上半
+      state.top = true;
+
+      // 若剛結束的是 9 局（含之後）且已分出勝負 → 結束
+      if(finishedInning >= 9 && state.score[state.teamL] !== state.score[state.teamR]){
+        endGame(); return;
+      }
+
+      // 否則進入下一局
+      state.inning += 1;
+    }
+
+    saveBasics();
+    updateAll();
+  }
+
+  /* 事件邏輯 */
+  function hit(n){
+    if(state.edit_mode || state.game_over) return;
+    addPitch(currentDefense());
+    let newBases = [false,false,false];
+    let scoreAdd = 0;
+
+    for(let i=2;i>=0;i--){
+      if(state.bases[i]){
+        const t = i + n;
+        if(t >= 3) scoreAdd += 1;
+        else newBases[t] = true;
+      }
+    }
+    if(n < 4){
+      const dest = n - 1;
+      if(dest >= 0 && dest < 3) newBases[dest] = true;
+    } else {
+      scoreAdd += 1;
+    }
+
+    state.bases = newBases;
+    state.score[currentOffense()] += scoreAdd;
+    clearCounts();
+    logEvent(labelForAct('hit-'+n));
+    if(maybeWalkoff(scoreAdd)) { saveBasics(); updateAll(); return; }
+    saveBasics(); updateAll();
+  }
+  function groundRuleDouble(){ hit(2); }
+
+  function forcedFromFirst(){
+    let scoreAdd = 0;
+    const b = state.bases.slice();
+    if(!b[0]){
+      state.bases = [true, b[1], b[2]];
+    }else{
+      const nb = [true,false,false];
+      nb[1] = true;
+      if(b[1]){
+        if(b[2]){ scoreAdd += 1; nb[2] = true; }
+        else { nb[2] = true; }
+      }else{
+        nb[2] = b[2];
+      }
+      state.bases = nb;
+    }
+    if(scoreAdd){ state.score[currentOffense()] += scoreAdd; }
+    return scoreAdd;
+  }
+
+  function addStrike(){
+    if(state.edit_mode || state.game_over) return;
+    addPitch(currentDefense());
+    state.strike += 1;
+    logEvent(labelForAct('strike'));
+    if(state.strike >= 3){
+      state.strike = 0; state.ball = 0; state.out += 1;
+      if(state.out >= 3){ saveBasics(); changeSide(); return; }
+    }
+    saveBasics(); updateAll();
+  }
+
+  function addBall(){
+    if(state.edit_mode || state.game_over) return;
+    addPitch(currentDefense());
+    state.ball += 1;
+    logEvent(labelForAct('ball'));
+    if(state.ball >= 4){
+      const scored = forcedFromFirst();
+      logEvent(labelForAct('bb'));
+      clearCounts();
+      if(maybeWalkoff(scored)) { saveBasics(); updateAll(); return; }
+    }
+    saveBasics(); updateAll();
+  }
+
+  function addOut(withLabel){
+    if(state.edit_mode || state.game_over) return;
+    addPitch(currentDefense());
+    if(withLabel) logEvent(withLabel);
+    state.strike = 0; state.ball = 0; state.out += 1;
+    if(state.out >= 3){ saveBasics(); changeSide(); return; }
+    saveBasics(); updateAll();
+  }
+
+  function hbp(){
+    if(state.edit_mode || state.game_over) return;
+    addPitch(currentDefense());
+    const scored = forcedFromFirst();
+    clearCounts();
+    logEvent(labelForAct('hbp'));
+    if(maybeWalkoff(scored)) { saveBasics(); updateAll(); return; }
+    saveBasics(); updateAll();
+  }
+
+  /* UI 更新 */
+  function updateAll(){
+    el.banner.textContent = `${state.inning} 局 ${state.top ? '上' : '下'}`;
+    el.info.textContent = `攻方：${currentOffense()}　守方：${currentDefense()}`;
+
+    if(!state.game_over){
+      el.gameover.textContent = "";
+      el.pitch.textContent = `PITCH ${currentDefense()}: ${state.pitch_team[currentDefense()]}`;
+    }
+
+    document.getElementById('b1').style.background = state.bases[0] ? '#FFEB3B' : OFF;
+    document.getElementById('b2').style.background = state.bases[1] ? '#FFEB3B' : OFF;
+    document.getElementById('b3').style.background = state.bases[2] ? '#FFEB3B' : OFF;
+
+    el.teamA.textContent = state.teamL;
+    el.teamB.textContent = state.teamR;
+    el.scoreA.textContent = state.score[state.teamL];
+    el.scoreB.textContent = state.score[state.teamR];
+
+    const setLights = (row, count, max, color) => {
+      const dots = row.querySelectorAll('.light:not(.clear)');
+      dots.forEach((dot, idx)=>{
+        dot.style.background = (idx < count) ? color : OFF;
+        dot.onclick = ()=>{
+          if(!state.edit_mode) return;
+          if(row===el.rowS) state.strike = Math.min(idx+1,2);
+          if(row===el.rowB) state.ball   = Math.min(idx+1,3);
+          if(row===el.rowO) state.out    = Math.min(idx+1,2);
+          updateAll();
+        };
+        dot.oncontextmenu = (e)=>{
+          if(!state.edit_mode) return;
+          e.preventDefault();
+          if(row===el.rowS) state.strike = 0;
+          if(row===el.rowB) state.ball   = 0;
+          if(row===el.rowO) state.out    = 0;
+          updateAll();
+          return false;
+        };
+      });
+      const clearBtn = row.querySelector('.clear');
+      clearBtn.style.display = state.edit_mode ? 'inline-block' : 'none';
+      clearBtn.onclick = ()=>{
+        if(!state.edit_mode) return;
+        if(row===el.rowS) state.strike = 0;
+        if(row===el.rowB) state.ball   = 0;
+        if(row===el.rowO) state.out    = 0;
+        updateAll();
+      };
+    };
+    setLights(el.rowS, Math.min(state.strike,2), 2, S_ON);
+    setLights(el.rowB, Math.min(state.ball,3),   3, B_ON);
+    setLights(el.rowO, Math.min(state.out,2),    2, O_ON);
+
+    el.pMinus.classList.toggle('hidden', !state.edit_mode);
+    el.pPlus.classList.toggle('hidden', !state.edit_mode);
+    el.scoreAdjust.classList.toggle('hidden', !state.edit_mode);
+    document.querySelectorAll('.actions-rows .btn').forEach(btn=>{
+      if(btn.id !== 'btnSetupStart'){ btn.disabled = state.edit_mode || state.game_over; }
+    });
+
+    renderLogTable();
+  }
+
+  /* 綁定動作按鈕（包含寫入紀錄標籤） */
+  document.querySelectorAll('.act').forEach(b=>{
+    const act = b.dataset.act;
+    b.addEventListener('click', ()=>{
+      if(act==='strike') addStrike();
+      else if(act==='ball') addBall();
+      else if(act==='ground') addOut(labelForAct('ground'));
+      else if(act==='fly') addOut(labelForAct('fly'));
+      else if(act==='hbp') hbp();
+      else if(act==='grd') groundRuleDouble();
+      else if(act.startsWith('hit-')){
+        const n = parseInt(act.split('-')[1],10);
+        hit(n);
+      }
+    });
+  });
+
+  /* 編輯模式 */
+  el.btnEdit.addEventListener('click', ()=>{
+    state.edit_mode = !state.edit_mode;
+    el.btnEdit.textContent = state.edit_mode ? '完成' : '編輯';
+    updateAll();
+  });
+
+  /* 打開賽前設定 */
+  el.btnReset.addEventListener('click', openSetup);
+
+  /* 設定：左先攻、右先守 → 開始比賽（重置並存檔） */
+  el.btnSetupStart.addEventListener('click', ()=>{
+    const off = (el.inTeamOff.value || '先攻隊伍').trim();
+    const def = (el.inTeamDef.value || '先守隊伍').trim();
+    state.teamL = off; state.teamR = def;
+
+    state.inning = 1; state.top = true;
+    state.strike = 0; state.ball = 0; state.out = 0;
+    state.pitch_team[off] = 0; state.pitch_team[def] = 0;
+    state.score[off] = 0; state.score[def] = 0;
+    state.bases = [false,false,false];
+    state.game_over = false;
+    state.logs = {timeline: []};
+    saveBasics(); saveLogs();
+    closeSetup();
+    updateAll();
+  });
+
+  function openSetup(){
+    el.inTeamOff.value = state.teamL;
+    el.inTeamDef.value = state.teamR;
+    document.getElementById('setup').classList.remove('hidden');
+  }
+  function closeSetup(){ document.getElementById('setup').classList.add('hidden'); }
+
+  /* 匯出 CSV */
+  el.btnExport.addEventListener('click', ()=>{
+    const lines = [];
+    lines.push(['局數', state.teamL+'投手', state.teamR+'投手', '比分'].join(','));
+    const byInning = {};
+    for(const e of state.logs.timeline){
+      byInning[e.inning] ||= {L:[],R:[]};
+      (e.pitcherTeam === state.teamL ? byInning[e.inning].L : byInning[e.inning].R).push(e);
+    }
+    const keys = Object.keys(byInning).map(Number).sort((a,b)=>a-b);
+    for(const k of keys){
+      const Lseq = byInning[k].L, Rseq = byInning[k].R;
+      const maxLen = Math.max(Lseq.length, Rseq.length);
+      for(let i=0;i<maxLen;i++){
+        const Lev = Lseq[i], Rev = Rseq[i];
+        const scoreStr = Rev ? `${Rev.scoreL}:${Rev.scoreR}` : (Lev ? `${Lev.scoreL}:${Lev.scoreR}` : '');
+        lines.push([k, Lev?Lev.label:'X', Rev?Rev.label:'X', scoreStr].map(csvEsc).join(','));
+      }
+    }
+    const blob = new Blob([lines.join('\n')], {type:'text/csv;charset=utf-8;'});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = `逐球紀錄.csv`; a.click();
+    URL.revokeObjectURL(url);
+  });
+
+  /* 清除紀錄 */
+  el.btnClearLog.addEventListener('click', ()=>{
+    if(confirm('清除所有逐球紀錄？此動作無法復原。')){
+      state.logs = {timeline: []};
+      saveLogs();
+      renderLogTable();
+    }
+  });
+
+  /* 初始化 */
+  updateAll();
+
+  /* PWA：Service Worker（需與 index.html 同資料夾） */
+  if('serviceWorker' in navigator){
+    window.addEventListener('load', ()=>navigator.serviceWorker.register('service-worker.js'));
+  }
+
+  /* 通用工具 */
+  function esc(s){ return String(s).replace(/[&<>"']/g, m=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[m])); }
+  function csvEsc(s){ const t = String(s ?? ''); return /[",\n]/.test(t) ? `"${t.replace(/"/g,'""')}"` : t; }
+  function saveJSON(key, val){ localStorage.setItem(key, JSON.stringify(val)); }
+  function loadJSON(key){ try{ const s=localStorage.getItem(key); return s?JSON.parse(s):null; }catch{return null} }
+})();
+</script>
+</body>
+</html>
