@@ -400,6 +400,8 @@
 
   function changeSide(){
     if(state.game_over) return;
+    // 將換局列入歷史，讓使用者可以復原
+    pushHistory();
     state.out=0; state.strike=0; state.ball=0; state.bases=[false,false,false];
     if(state.top){
       state.top=false;
@@ -569,7 +571,7 @@
 
   function errorHit(){
     if(state.edit_mode||state.game_over) return;
-    pushHistory();
+    // hit() 內已會 pushHistory()，避免重複
     hit(1);
     const arr = currentHalfArray();
     if(arr.length>0){ arr[arr.length-1].summary='失誤'; saveInnings(); }
@@ -780,8 +782,9 @@
 
   // 匯出 CSV（保留逐球）
   el.btnExport.addEventListener('click', ()=>{
+    // 與畫面表頭對齊（修正「先功」為「先攻」）
     const rows = [[
-      '局數','先守隊伍名稱（投手）','先功隊伍名稱（打擊）','先功隊伍名稱（投手）','先守隊伍名稱（打擊）','比分'
+      '局數','先守隊伍（投手）','先攻隊伍（打擊）','先攻隊伍（投手）','先守隊伍（打擊）','比分'
     ]];
     state.logs.timeline.forEach(e=>{
       if(e.sep) return;
