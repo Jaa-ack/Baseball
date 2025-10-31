@@ -163,6 +163,7 @@
         <h3 style="margin:0">逐球紀錄</h3>
         <div class="row">
           <button id="btnUndo" class="btn">↩︎ 復原上一步</button>
+          <button id="btnExport" class="btn">匯出 CSV</button>
         </div>
       </div>
       <div class="logbox">
@@ -251,6 +252,7 @@
     thTeamR:document.getElementById('thTeamR'),
     logBody:document.getElementById('logBody'),
     btnUndo:document.getElementById('btnUndo'),
+    btnExport:document.getElementById('btnExport'),
   };
 
   // 初始化分數與投球數
@@ -383,12 +385,34 @@
     saveBasics(); updateAll();
   }
 
+  /* === 觸身球：只讓打者上一壘；若壘被占用才連鎖擠進（可能得分） === */
   function hbp(){
     if(state.edit_mode||state.game_over) return;
     pushHistory(); addPitch(currentDefense());
-    const scored = advanceRunners(1); // 觸身球：視為打者上一壘、跑者強迫推進
-    clearCounts(); logEvent('觸身球');
-    if(maybeWalkoff(scored)) { saveBasics(); updateAll(); return; }
+
+    // 以當前壘包為基底，僅在衝突時進行連鎖擠進
+    let b1 = state.bases[0];
+    let b2 = state.bases[1];
+    let b3 = state.bases[2];
+    let scoreAdd = 0;
+
+    if (b1) {               // 一壘有人 → 需要把原一壘跑者擠到二壘
+      if (b2) {             // 二壘也有人 → 擠到三壘
+        if (b3) {           // 三壘也有人 → 被擠回本壘得分
+          scoreAdd += 1;
+        }
+        b3 = true;          // 原二壘跑者到三壘
+      }
+      b2 = true;            // 原一壘跑者到二壘
+    }
+    b1 = true;              // 打者占上一壘
+    state.bases = [b1, b2, b3];
+
+    if (scoreAdd) state.score[currentOffense()] += scoreAdd;
+    clearCounts();
+    logEvent('觸身球');
+
+    if(maybeWalkoff(scoreAdd)) { saveBasics(); updateAll(); return; }
     saveBasics(); updateAll();
   }
 
@@ -410,7 +434,7 @@
     const scored = advanceRunners(1);
     logEvent('暴投');
     if(state.ball>=4){
-      const s2 = advanceRunners(1); // 若剛好四壞再強迫推進一次
+      const s2 = advanceRunners(1);
       clearCounts(); logEvent('保送');
       if(maybeWalkoff(scored+s2)) { saveBasics(); updateAll(); return; }
     }
@@ -442,7 +466,7 @@
     saveBasics(); updateAll();
   }
 
-  /* ====== Log 與 UI ====== */
+  /* ====== Log / UI ====== */
   function logEvent(lbl){
     state.logs.timeline.push({
       inning:state.inning,
@@ -589,6 +613,20 @@
   // 復原上一步
   el.btnUndo.addEventListener('click',()=>{ undoLast(); });
 
+  // 匯出 CSV（適用 GitHub Pages）
+  el.btnExport.addEventListener('click', ()=>{
+    const rows = [['局數','半','投手隊','事件','左分','右分']];
+    state.logs.timeline.forEach(e=>{
+      rows.push([e.inning, e.half, e.pitcherTeam, e.label, e.scoreL, e.scoreR]);
+    });
+    const csv = rows.map(r => r.map(v => `"${String(v).replace(/"/g,'""')}"`).join(',')).join('\r\n');
+    const blob = new Blob([csv], {type: 'text/csv;charset=utf-8;'});
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `log_${new Date().toISOString().slice(0,10)}.csv`;
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  });
+
   // 設定頁
   el.btnReset.addEventListener('click', openSetup);
   el.btnSetupStart.addEventListener('click', ()=>{
@@ -607,8 +645,10 @@
   // 初始渲染
   updateAll();
 
-  // PWA
-  if('serviceWorker' in navigator){ window.addEventListener('load',()=>navigator.serviceWorker.register('service-worker.js')); }
+  // PWA（GitHub Pages 可用；確保 service-worker.js 與 index.html 同資料夾）
+  if('serviceWorker' in navigator){
+    window.addEventListener('load',()=>navigator.serviceWorker.register('service-worker.js'));
+  }
 })();
 </script>
 </body>
