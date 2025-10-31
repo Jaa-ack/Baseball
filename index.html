@@ -75,12 +75,25 @@
     /* === Fixed‑ratio stage that scales to fit the phone === */
     .stage{
       margin:0 auto;
-      transform-origin: top center;
+      transform-origin: center center;
+      -webkit-transform-origin: center center;
       /* Prevent blur on some mobile browsers when scaled */
-      -webkit-transform-origin: top center;
     }
-    /* When installed as PWA on notched phones, keep content away from edges */
-    body{padding-bottom: max(env(safe-area-inset-bottom), 0px);}
+
+    /* Center the app viewport so on iPhone (and other phones) the scaled stage is centered.
+       Use safe-area insets so content doesn't hit notches. */
+    html, body { height: 100%; }
+    body{
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      min-height:100vh;
+      /* keep some padding but respect notch safe area */
+      padding: max(env(safe-area-inset-top, 12px), 12px) max(env(safe-area-inset-right,12px),12px) max(env(safe-area-inset-bottom,12px),12px) max(env(safe-area-inset-left,12px),12px);
+      -webkit-font-smoothing:antialiased;
+      -webkit-text-size-adjust:100%;
+      background:var(--bg);
+    }
   </style>
 
 </head>
@@ -866,6 +879,8 @@
       stage.style.width  = designW + 'px';
       stage.style.height = designH + 'px';
       stage.style.transform = 'scale(' + scale + ')';
+      // ensure the scaled stage stays visually centered under body:flex
+      stage.style.margin = '0 auto';
     }
 
     window.addEventListener('resize', fit, {passive:true});
