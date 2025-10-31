@@ -2,7 +2,7 @@
 <html lang="zh-Hant">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,maximum-scale=1">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <link rel="manifest" href="manifest.json">
@@ -21,38 +21,17 @@
       --b-on:#6BE870;
       --o-on:#FF6E6E;
       --tbl:#3a3a36;
-
-      /* 壘包尺寸（桌機預設），行動裝置會覆寫 */
-      --bases-w: 260px;
-      --bases-h: 220px;
-      --base-size: 20px;
-      --home-w: 26px;
-      --home-h: 20px;
-
-      /* 主要字級（行動裝置會略縮放） */
-      --h1:20px;
-      --pitch-fz:18px;
-      --pa-fz:14px;
-      --points-fz:22px;
-
-      /* 互動按鈕尺寸 */
-      --circle-btn:64px;
-      --square-minw:120px;
-      --panel-pad:12px;
-      --gap:10px;
     }
-
-    /* ====== 共用 ====== */
     html,body{margin:0;padding:0;background:var(--bg);color:var(--text);
       font-family:system-ui,-apple-system,"Segoe UI",Roboto,"Noto Sans",sans-serif;}
     .wrap{max-width:980px;margin:0 auto;padding:12px;}
-    .panel{background:var(--panel);border-radius:14px;padding:var(--panel-pad);
+    .panel{background:var(--panel);border-radius:14px;padding:12px;
       box-shadow:0 6px 20px rgba(0,0,0,.25);}
-    .row{display:flex;align-items:center;gap:var(--gap);flex-wrap:wrap;}
+    .row{display:flex;align-items:center;gap:10px;flex-wrap:wrap;}
     .topbar{justify-content:space-between}
-    h1{font-size:var(--h1);margin:0}
+    h1{font-size:20px;margin:0}
     .btn{background:var(--btn);color:var(--btnfg);border:none;border-radius:10px;
-      padding:10px 12px;font-weight:600;cursor:pointer;touch-action:manipulation}
+      padding:10px 12px;font-weight:600;cursor:pointer}
     .btn:active{background:var(--btnactive)}
     .btn.toggle{min-width:88px;border-radius:999px}
     .btn.toggle.active{background:var(--b-on);color:#111}
@@ -62,89 +41,37 @@
     .light{width:26px;height:26px;border-radius:50%;background:var(--off);}
     .light.clear{outline:2px dashed #666;outline-offset:3px;display:none;}
     .label{font-weight:700;width:22px;text-align:center}
-
-    /* 壘包菱形（使用變數，行動裝置會放大） */
-    .bases{position:relative;width:var(--bases-w);height:var(--bases-h);background:var(--panel);margin-inline:auto}
-    .base{position:absolute;width:var(--base-size);height:var(--base-size);background:var(--off)}
-    /* 位置參考依據尺寸比例微調 */
-    .b1{left:calc(var(--bases-w) - 60px); top:calc(var(--bases-h)/2 - 6px)}
-    .b2{left:calc(var(--bases-w)/2 - 8px); top:30px}
-    .b3{left:45px; top:calc(var(--bases-h)/2 - 6px)}
-    .home{position:absolute;left:calc(var(--bases-w)/2 - var(--home-w)/2); top:calc(var(--bases-h) - 40px);
-      width:var(--home-w);height:var(--home-h);background:white; clip-path:polygon(50% 100%, 0 0, 100% 0)}
-
-    .pitch{font-size:var(--pitch-fz);font-weight:800}
-    .pitch-line{display:flex;align-items:center;gap:8px}
-    .pa-line{font-size:var(--pa-fz);margin-top:6px;display:flex;align-items:center;gap:8px}
+    .bases{position:relative;width:240px;height:200px;background:var(--panel)}
+    .base{position:absolute;width:16px;height:16px;background:var(--off)}
+    .b1{left:190px;top:100px}
+    .b2{left:120px;top:30px}
+    .b3{left:50px;top:100px}
+    .home{position:absolute;left:120px;top:170px;width:24px;height:18px;background:white;
+      clip-path:polygon(50% 100%, 0 0, 100% 0)}
+    .pitch{font-size:18px;font-weight:800}
+    .pa-line{font-size:14px;margin-top:6px;display:flex;align-items:center;gap:8px}
     .endbanner{color:var(--o-on);font-weight:900;font-size:18px;text-align:center;min-height:26px}
     .hidden{display:none!important;}
     .scoretbl{width:100%;border-collapse:collapse}
     .scoretbl th,.scoretbl td{padding:8px 6px}
-    .scoretbl .points{font-size:var(--points-fz);font-weight:900;color:var(--b-on)}
-
-    /* 動作列：行動裝置兩欄，桌機保持自適應 */
+    .scoretbl .points{font-size:22px;font-weight:900;color:var(--b-on)}
     .actions-rows{display:grid;gap:12px}
-    .actions-rows .line{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
-    .btn.circle{width:var(--circle-btn);height:var(--circle-btn);border-radius:50%;font-size:16px;font-weight:800;justify-self:start}
-    .btn.square{border-radius:12px;min-width:var(--square-minw);justify-self:stretch}
-
-    /* 逐球表：行動裝置高度自適 40vh，讓使用中仍看得到 */
-    .logbox{max-height:40vh;overflow:auto;border:1px solid var(--tbl);border-radius:12px}
+    .actions-rows .line{display:flex;gap:10px}
+    .btn.circle{width:64px;height:64px;border-radius:50%;font-size:16px;font-weight:800}
+    .btn.square{border-radius:12px;min-width:120px}
+    .logbox{max-height:320px;overflow:auto;border:1px solid var(--tbl);border-radius:12px}
     .logtbl{width:100%;border-collapse:collapse;border:1px solid var(--tbl)}
     .logtbl th,.logtbl td{border-bottom:1px solid var(--tbl);padding:8px 10px;text-align:center}
-
     .setup{position:fixed;inset:0;background:rgba(0,0,0,.6);display:flex;
       align-items:center;justify-content:center;z-index:50;}
     .setup .card{width:min(680px,92vw);background:var(--panel);border-radius:16px;
       padding:18px;box-shadow:0 10px 30px rgba(0,0,0,.5)}
-
-    /* ====== 行動裝置（iPhone）優化 ====== */
-    @media (max-width: 480px){
-      :root{
-        --h1:18px;
-        --pitch-fz:16px;
-        --pa-fz:13px;
-        --points-fz:20px;
-        --circle-btn:56px;
-        --square-minw:auto;
-        --panel-pad:10px;
-        --gap:8px;
-
-        /* 壘包更大一些 */
-        --bases-w: 300px;
-        --bases-h: 250px;
-        --base-size: 22px;
-        --home-w: 28px;
-        --home-h: 22px;
-      }
-      .wrap{padding:8px}
-      .row.topbar{gap:6px}
-      .scorebox{margin-top:6px}
-      /* 互動區塊順序：資訊 → PITCH/PA → S/B/O/站位 → 壘包 → 比分 → 動作按鈕 → 逐球表 */
-      .layout-mobile{display:grid;gap:12px}
-      .lights-row .light{width:24px;height:24px}
-      /* 讓重要資訊貼齊上方 */
-      .panel{padding:var(--panel-pad)}
-    }
-
-    /* ====== 桌機（較寬）維持雙欄 ====== */
-    @media (min-width: 768px){
-      .main-grid{
-        display:grid;
-        grid-template-columns: 1fr 280px;
-        gap:16px;
-        align-items:start;
-      }
-      .actions-rows .line{grid-template-columns:repeat(4,minmax(0,1fr))}
-      .btn.circle{justify-self:stretch}
-      .btn.square{justify-self:stretch}
-    }
+    .pitch-line {display: flex;align-items: center;gap: 8px;}
   </style>
 </head>
 <body>
 <div class="wrap">
-  <div class="panel layout-mobile">
-    <!-- Top bar -->
+  <div class="panel">
     <div class="row topbar">
       <div>
         <h1 id="banner"></h1>
@@ -156,81 +83,75 @@
       </div>
     </div>
 
-    <!-- 主體：左側資訊 + 右側比分（桌機為雙欄，行動裝置直排） -->
-    <div class="main-grid">
-      <!-- 左側：PITCH/PA + S/B/O + 站位 + 壘包 -->
+    <div class="row" style="margin-top:10px;gap:20px">
       <div>
-        <!-- PITCH/PA 區 -->
-        <div class="pitchbox">
-          <div id="pitchLine" class="pitch-line">
+        <!-- 打者站位切換（恆亮） -->
+        <div class="lights-row" id="rowStance" style="justify-content:flex-start">
+          <button id="btnLeftBat"  class="btn toggle">左打</button>
+          <button id="btnRightBat" class="btn toggle">右打</button>
+        </div>
+
+        <div class="lights-row" id="rowS">
+          <div class="light clear" id="clearS" title="清空好球"></div>
+          <div class="label">S</div>
+          <div class="light" data-s="1"></div>
+          <div class="light" data-s="2"></div>
+        </div>
+        <div class="lights-row" id="rowB">
+          <div class="light clear" id="clearB" title="清空壞球"></div>
+          <div class="label">B</div>
+          <div class="light" data-b="1"></div>
+          <div class="light" data-b="2"></div>
+          <div class="light" data-b="3"></div>
+        </div>
+        <div class="lights-row" id="rowO">
+          <div class="light clear" id="clearO" title="清空出局燈"></div>
+          <div class="label">O</div>
+          <div class="light" data-o="1"></div>
+          <div class="light" data-o="2"></div>
+        </div>
+      </div>
+      <div class="bases panel">
+        <div class="base b1" id="b1"></div>
+        <div class="base b2" id="b2"></div>
+        <div class="base b3" id="b3"></div>
+        <div class="home"></div>
+      </div>
+    </div>
+
+    <div class="row" style="margin-top:8px;justify-content:space-between">
+      <div class="pitchbox">
+        <!-- 新增包一層 pitch-line，讓按鈕排在 PITCH 文字右側 -->
+        <div id="pitchLine" class="pitch-line">
             <div id="pitch" class="pitch mono"></div>
             <button id="pMinus" class="btn hidden">-</button>
             <button id="pPlus" class="btn hidden">+</button>
-          </div>
-          <div id="paLine" class="pa-line">
+        </div>
+
+        <!-- 原本的累計打席區保持不變 -->
+        <div id="paLine" class="pa-line">
             <span id="paLabel">累計打席 先攻隊伍：0</span>
             <button id="paMinus" class="btn hidden">-</button>
             <button id="paPlus"  class="btn hidden">+</button>
-          </div>
-        </div>
-
-        <!-- 站位 / S B O 燈 -->
-        <div style="margin-top:6px">
-          <div class="lights-row" id="rowStance" style="justify-content:flex-start">
-            <button id="btnLeftBat"  class="btn toggle">左打</button>
-            <button id="btnRightBat" class="btn toggle">右打</button>
-          </div>
-          <div class="lights-row" id="rowS">
-            <div class="light clear" id="clearS" title="清空好球"></div>
-            <div class="label">S</div>
-            <div class="light" data-s="1"></div>
-            <div class="light" data-s="2"></div>
-          </div>
-          <div class="lights-row" id="rowB">
-            <div class="light clear" id="clearB" title="清空壞球"></div>
-            <div class="label">B</div>
-            <div class="light" data-b="1"></div>
-            <div class="light" data-b="2"></div>
-            <div class="light" data-b="3"></div>
-          </div>
-          <div class="lights-row" id="rowO">
-            <div class="light clear" id="clearO" title="清空出局燈"></div>
-            <div class="label">O</div>
-            <div class="light" data-o="1"></div>
-            <div class="light" data-o="2"></div>
-          </div>
-        </div>
-
-        <!-- 壘包（行動裝置會放大） -->
-        <div class="bases panel">
-          <div class="base b1" id="b1"></div>
-          <div class="base b2" id="b2"></div>
-          <div class="base b3" id="b3"></div>
-          <div class="home"></div>
         </div>
       </div>
-
-      <!-- 右側：比分 + 比賽結束訊息 -->
-      <div>
-        <div style="min-width:0" class="scorebox">
-          <div id="gameover" class="endbanner"></div>
-          <table class="scoretbl">
-            <thead><tr><th>隊伍</th><th>分數</th></tr></thead>
-            <tbody>
-              <tr><td id="teamA"></td><td id="scoreA" class="points">0</td></tr>
-              <tr><td id="teamB"></td><td id="scoreB" class="points">0</td></tr>
-            </tbody>
-          </table>
-          <div id="scoreAdjust" class="row hidden" style="margin-top:6px">
-            <button id="sMinus" class="btn">-</button>
-            <button id="sPlus"  class="btn">+</button>
-          </div>
+      <div style="min-width:260px" class="scorebox">
+        <div id="gameover" class="endbanner"></div>
+        <table class="scoretbl">
+          <thead><tr><th>隊伍</th><th>分數</th></tr></thead>
+          <tbody>
+            <tr><td id="teamA"></td><td id="scoreA" class="points">0</td></tr>
+            <tr><td id="teamB"></td><td id="scoreB" class="points">0</td></tr>
+          </tbody>
+        </table>
+        <div id="scoreAdjust" class="row hidden" style="margin-top:6px">
+          <button id="sMinus" class="btn">-</button>
+          <button id="sPlus"  class="btn">+</button>
         </div>
       </div>
     </div>
 
-    <!-- 動作按鈕（在手機上兩欄網格，避免太寬） -->
-    <div class="panel" style="margin-top:8px">
+    <div class="panel" style="margin-top:12px">
       <div class="actions-rows">
         <div class="line">
           <button class="btn circle act" data-act="strike">好球</button>
@@ -240,16 +161,16 @@
           <button class="btn square act" data-act="ground">滾地球</button>
           <button class="btn square act" data-act="fly">高飛球</button>
           <button class="btn square act" data-act="foul">界外球</button>
-          <button class="btn square act" data-act="hbp">觸身球</button>
         </div>
         <div class="line">
           <button class="btn square act" data-act="hit-1">一壘安打</button>
           <button class="btn square act" data-act="hit-2">二壘安打</button>
           <button class="btn square act" data-act="hit-3">三壘安打</button>
           <button class="btn square act" data-act="hit-4">全壘打</button>
+          <button class="btn square act" data-act="grd">場地規則</button>
         </div>
         <div class="line">
-          <button class="btn square act" data-act="grd">場地規則</button>
+          <button class="btn square act" data-act="hbp">觸身球</button>
           <button class="btn square act" data-act="wp">暴投</button>
           <button class="btn square act" data-act="err">失誤</button>
           <button class="btn square act" data-act="bunt">短打成功</button>
@@ -257,9 +178,8 @@
       </div>
     </div>
 
-    <!-- 逐球紀錄（手機視窗 40vh，操作同時可見） -->
     <div class="logwrap">
-      <div class="loghead row" style="justify-content:space-between;align-items:center">
+      <div class="loghead">
         <h3 style="margin:0">逐球紀錄</h3>
         <div class="row">
           <button id="btnUndo" class="btn">↩︎ 復原上一步</button>
@@ -289,14 +209,14 @@
 <div id="setup" class="setup hidden">
   <div class="card">
     <h2>賽前設定</h2>
-    <p class="subtle">請輸入兩隊名稱</p>
+    <p class="subtle">請輸入兩隊名稱並指定左側為先攻、右側為先守。</p>
     <div class="teams-flex">
       <div class="teamcard">
-        <h4>先攻隊伍名稱</h4>
+        <h4>左：先攻隊伍</h4>
         <div class="fld"><input id="inTeamOff" placeholder="先攻隊伍"></div>
       </div>
       <div class="teamcard">
-        <h4>先守隊伍名稱</h4>
+        <h4>右：先守隊伍</h4>
         <div class="fld"><input id="inTeamDef" placeholder="先守隊伍"></div>
       </div>
     </div>
@@ -409,6 +329,8 @@
     const idx=state.inning-1;
     return state.top ? state.innings[idx].top : state.innings[idx].bottom;
   }
+
+  // 計算某隊整場累計 PA（先攻=各局top總和；先守=各局bottom總和）
   function totalPAs(team){
     let sum=0;
     state.innings.forEach(inn=>{
@@ -475,7 +397,7 @@
     saveBasics(); updateAll();
   }
 
-  /* ====== 打席結束 → 紀錄到 innings ====== */
+  /* ====== 打席結束 → 紀錄到方案A（innings） ====== */
   function pushPAFromLastEvent(reasonTag){
     for(let i=state.logs.timeline.length-1;i>=0;i--){
       const e=state.logs.timeline[i];
@@ -736,9 +658,9 @@
       el.pitch.textContent=`PITCH ${currentDefense()}: ${state.pitch_team[currentDefense()]||0}`;
     }
 
-    // 累計打席（整場累計；顯示目前攻擊方隊名）
+    // ===== 累計打席顯示（整場累計；顯示目前攻擊方隊名） =====
     const offenseTeam = currentOffense();
-    const paCountTotal = totalPAs(offenseTeam);
+    const paCountTotal = totalPAs(offenseTeam); // 整場累積
     el.paLabel.textContent = `累計打席 ${offenseTeam}：${paCountTotal}`;
     el.paMinus.classList.toggle('hidden', !state.edit_mode);
     el.paPlus.classList.toggle('hidden', !state.edit_mode);
@@ -841,7 +763,7 @@
   // 復原上一步
   el.btnUndo.addEventListener('click',()=>{ undoLast(); });
 
-  // 匯出 CSV（逐球）
+  // 匯出 CSV（保留逐球）
   el.btnExport.addEventListener('click', ()=>{
     const rows = [[
       '局數','先守隊伍名稱（投手）','先功隊伍名稱（打擊）','先功隊伍名稱（投手）','先守隊伍名稱（打擊）','比分'
@@ -885,7 +807,7 @@
   // 初始渲染
   updateAll();
 
-  // PWA（GitHub Pages）
+  // PWA（GitHub Pages 可用）
   if('serviceWorker' in navigator){
     window.addEventListener('load',()=>navigator.serviceWorker.register('service-worker.js'));
   }
