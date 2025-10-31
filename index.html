@@ -33,6 +33,8 @@
     .btn{background:var(--btn);color:var(--btnfg);border:none;border-radius:10px;
       padding:10px 12px;font-weight:600;cursor:pointer}
     .btn:active{background:var(--btnactive)}
+    .btn.toggle{min-width:88px;border-radius:999px}
+    .btn.toggle.active{background:var(--b-on);color:#111}
     .grid{display:grid;gap:10px}
     .scorebox{border:1px solid #6A6F68;border-radius:10px;padding:10px 12px}
     .lights-row{display:flex;align-items:center;gap:8px;margin:8px 0}
@@ -81,6 +83,12 @@
 
     <div class="row" style="margin-top:10px;gap:20px">
       <div>
+        <!-- 新增：打擊站位切換（恆亮） -->
+        <div class="lights-row" id="rowStance" style="justify-content:flex-start">
+          <button id="btnLeftBat"  class="btn toggle">左打</button>
+          <button id="btnRightBat" class="btn toggle">右打</button>
+        </div>
+
         <div class="lights-row" id="rowS">
           <div class="light clear" id="clearS" title="清空好球"></div>
           <div class="label">S</div>
@@ -171,8 +179,10 @@
           <thead>
             <tr>
               <th class="inning">局數</th>
-              <th id="thTeamL">（左）投手</th>
-              <th id="thTeamR">（右）投手</th>
+              <th id="thDefPitch">先守隊伍（投手）</th>
+              <th id="thOffBat">先攻隊伍（打擊）</th>
+              <th id="thOffPitch">先攻隊伍（投手）</th>
+              <th id="thDefBat">先守隊伍（打擊）</th>
               <th class="score">比分</th>
             </tr>
           </thead>
@@ -220,6 +230,7 @@
     bases:[false,false,false],
     edit_mode:false,game_over:false,
     logs: JSON.parse(localStorage.getItem('logs')||'{"timeline":[]}'),
+    stance: localStorage.getItem('stance') || '右打', // 新增：打者站位
   };
 
   const el={
@@ -248,11 +259,15 @@
     inTeamOff:document.getElementById('inTeamOff'),
     inTeamDef:document.getElementById('inTeamDef'),
     btnSetupStart:document.getElementById('btnSetupStart'),
-    thTeamL:document.getElementById('thTeamL'),
-    thTeamR:document.getElementById('thTeamR'),
+    thDefPitch:document.getElementById('thDefPitch'),
+    thOffBat:document.getElementById('thOffBat'),
+    thOffPitch:document.getElementById('thOffPitch'),
+    thDefBat:document.getElementById('thDefBat'),
     logBody:document.getElementById('logBody'),
     btnUndo:document.getElementById('btnUndo'),
     btnExport:document.getElementById('btnExport'),
+    btnLeftBat:document.getElementById('btnLeftBat'),
+    btnRightBat:document.getElementById('btnRightBat'),
   };
 
   // 初始化分數與投球數
@@ -266,8 +281,6 @@
 
   el.teamA.textContent=state.teamL;
   el.teamB.textContent=state.teamR;
-  el.thTeamL.textContent=state.teamL+'（投手）';
-  el.thTeamR.textContent=state.teamR+'（投手）';
 
   /* ====== 儲存/工具 ====== */
   function saveBasics(){
@@ -279,6 +292,7 @@
     localStorage.setItem('score_'+state.teamR,state.score[state.teamR]||0);
     localStorage.setItem('inning',state.inning);
     localStorage.setItem('top',state.top?'1':'0');
+    localStorage.setItem('stance',state.stance);
   }
   function saveLogs(){ localStorage.setItem('logs', JSON.stringify(state.logs)); }
   function addPitch(def){ state.pitch_team[def]=(state.pitch_team[def]||0)+1; }
@@ -323,9 +337,7 @@
     state.out=0; state.strike=0; state.ball=0; state.bases=[false,false,false];
     if(state.top){
       state.top=false;
-      if(state.inning>=9){
-        if(state.score[currentOffense()]>state.score[currentDefense()]){ endGame(); return; }
-      }
+      // ⚠️ 修正：九局上半不提前結束（不做「攻方領先就結束」的判斷）
     }else{
       const finished=state.inning; state.top=true;
       if(finished>=9 && state.score[state.teamL]!==state.score[state.teamR]){ endGame(); return; }
@@ -353,25 +365,41 @@
   }
   function groundRuleDouble(){ hit(2); }
 
+  // 三振
   function addStrike(){
     if(state.edit_mode||state.game_over) return;
     pushHistory(); addPitch(currentDefense());
-    state.strike+=1; logEvent('好球');
+    state.strike+=1;
     if(state.strike>=3){
       state.strike=0; state.ball=0; state.out+=1;
+      logEvent('三振');
       if(state.out>=3){ saveBasics(); changeSide(); return; }
+    }else{
+      logEvent('好球');
     }
     saveBasics(); updateAll();
   }
 
+  // ⚠️ 修正：保送邏輯（打者上一壘；僅在重疊時擠進）
   function addBall(){
     if(state.edit_mode||state.game_over) return;
     pushHistory(); addPitch(currentDefense());
     state.ball+=1; logEvent('壞球');
     if(state.ball>=4){
-      const scored = advanceRunners(1); // 四壞：打者上一壘 + 既有跑者強迫推進
+      // force-advance walk
+      let [b1,b2,b3] = state.bases;
+      let scoreAdd = 0;
+      if (b1){
+        if (b2){
+          if (b3){ scoreAdd += 1; }
+          b3 = true;
+        }
+        b2 = true;
+      }
+      b1 = true;
+      state.bases = [b1,b2,b3];
       clearCounts(); logEvent('保送');
-      if(maybeWalkoff(scored)) { saveBasics(); updateAll(); return; }
+      if(maybeWalkoff(scoreAdd)) { saveBasics(); updateAll(); return; }
     }
     saveBasics(); updateAll();
   }
@@ -390,22 +418,19 @@
     if(state.edit_mode||state.game_over) return;
     pushHistory(); addPitch(currentDefense());
 
-    // 以當前壘包為基底，僅在衝突時進行連鎖擠進
     let b1 = state.bases[0];
     let b2 = state.bases[1];
     let b3 = state.bases[2];
     let scoreAdd = 0;
 
-    if (b1) {               // 一壘有人 → 需要把原一壘跑者擠到二壘
-      if (b2) {             // 二壘也有人 → 擠到三壘
-        if (b3) {           // 三壘也有人 → 被擠回本壘得分
-          scoreAdd += 1;
-        }
-        b3 = true;          // 原二壘跑者到三壘
+    if (b1) {
+      if (b2) {
+        if (b3) { scoreAdd += 1; }
+        b3 = true;
       }
-      b2 = true;            // 原一壘跑者到二壘
+      b2 = true;
     }
-    b1 = true;              // 打者占上一壘
+    b1 = true;
     state.bases = [b1, b2, b3];
 
     if (scoreAdd) state.score[currentOffense()] += scoreAdd;
@@ -416,37 +441,55 @@
     saveBasics(); updateAll();
   }
 
+  // 界外：第三好球由界外取得 → 界外三振（依你需求）
   function foul(){
     if(state.edit_mode||state.game_over) return;
     pushHistory(); addPitch(currentDefense());
-    state.strike += 1; logEvent('界外球'); // 與好球相同，但紀錄為「界外球」
+    state.strike += 1;
     if(state.strike>=3){
       state.strike=0; state.ball=0; state.out+=1;
+      logEvent('界外三振');
       if(state.out>=3){ saveBasics(); changeSide(); return; }
+    }else{
+      logEvent('界外球');
     }
     saveBasics(); updateAll();
   }
 
+  // ⚠️ 修正：WP 造成四壞時，改用保送的擠進邏輯（不使用 advanceRunners 直接推進）
   function wp(){
     if(state.edit_mode||state.game_over) return;
     pushHistory(); addPitch(currentDefense());
-    state.ball += 1;
-    const scored = advanceRunners(1);
+    // 先暴投：跑者推進一個壘包
+    const scoredFromWP = advanceRunners(1);
     logEvent('暴投');
+
+    // 暴投同時算一顆壞球
+    state.ball += 1;
+    let extraScore = 0;
     if(state.ball>=4){
-      const s2 = advanceRunners(1);
+      let [b1,b2,b3] = state.bases;
+      if (b1){
+        if (b2){
+          if (b3){ extraScore += 1; }
+          b3 = true;
+        }
+        b2 = true;
+      }
+      b1 = true;
+      state.bases = [b1,b2,b3];
       clearCounts(); logEvent('保送');
-      if(maybeWalkoff(scored+s2)) { saveBasics(); updateAll(); return; }
     }
-    if(maybeWalkoff(scored)) { saveBasics(); updateAll(); return; }
+    if(maybeWalkoff(scoredFromWP + extraScore)) { saveBasics(); updateAll(); return; }
     saveBasics(); updateAll();
   }
 
+  // ⚠️ 修正：避免投球數 +2（由 hit(1) 計一次，最後改事件字串）
   function errorHit(){
     if(state.edit_mode||state.game_over) return;
-    pushHistory(); addPitch(currentDefense());
-    hit(1); // 行為同一壘安打
-    state.logs.timeline[state.logs.timeline.length-1].label='失誤'; // 改紀錄文字
+    pushHistory();
+    hit(1); // 只由 hit() 內部加一次 Pitch
+    state.logs.timeline[state.logs.timeline.length-1].label='失誤';
     saveBasics(); updateAll();
   }
 
@@ -468,11 +511,14 @@
 
   /* ====== Log / UI ====== */
   function logEvent(lbl){
+    const off=currentOffense(), def=currentDefense();
     state.logs.timeline.push({
       inning:state.inning,
       half:state.top?'上':'下',
-      pitcherTeam:currentDefense(),
-      label:lbl,
+      offenseTeam: off,
+      defenseTeam: def,
+      stance: state.stance, // 左打 / 右打
+      label:lbl,            // 投手事件字串
       scoreL:state.score[state.teamL]||0,
       scoreR:state.score[state.teamR]||0
     });
@@ -480,25 +526,31 @@
   }
 
   function renderLog(){
-    const byInning={};
-    for(const e of state.logs.timeline){
-      const key=e.inning; byInning[key] ||= {L:[],R:[]};
-      (e.pitcherTeam===state.teamL?byInning[key].L:byInning[key].R).push(e);
-    }
-    const keys=Object.keys(byInning).map(Number).sort((a,b)=>a-b);
+    // 動態表頭（固定角色：先攻=teamL；先守=teamR）
+    el.thDefPitch.textContent = `${state.teamR}（投手）`;
+    el.thOffBat.textContent   = `${state.teamL}（打擊）`;
+    el.thOffPitch.textContent = `${state.teamL}（投手）`;
+    el.thDefBat.textContent   = `${state.teamR}（打擊）`;
+
+    // 逐列輸出
     let html='';
-    for(const k of keys){
-      const Lseq=byInning[k].L, Rseq=byInning[k].R;
-      const maxLen=Math.max(Lseq.length,Rseq.length);
-      for(let i=0;i<maxLen;i++){
-        const Lev=Lseq[i], Rev=Rseq[i];
-        const scoreStr=Rev?`${Rev.scoreL}:${Rev.scoreR}`:(Lev?`${Lev.scoreL}:${Lev.scoreR}`:'');
-        html+=`<tr><td class="inning">${k}</td><td>${Lev?Lev.label:'X'}</td><td>${Rev?Rev.label:'X'}</td><td class="score">${scoreStr}</td></tr>`;
-      }
+    for(const e of state.logs.timeline){
+      const isTop = (e.half==='上'); // 上=先攻(L)打、先守(R)投
+      const col1 = isTop ? e.label : '';          // 先守隊伍（投手）
+      const col2 = isTop ? e.stance: '';          // 先攻隊伍（打擊）
+      const col3 = isTop ? ''       : e.label;    // 先攻隊伍（投手）
+      const col4 = isTop ? ''       : e.stance;   // 先守隊伍（打擊）
+      const scoreStr = `${e.scoreL}：${e.scoreR}`;
+      html+=`<tr>
+        <td class="inning">${e.inning}</td>
+        <td>${col1||'—'}</td>
+        <td>${col2||'—'}</td>
+        <td>${col3||'—'}</td>
+        <td>${col4||'—'}</td>
+        <td class="score">${scoreStr}</td>
+      </tr>`;
     }
-    el.logBody.innerHTML = html || `<tr><td colspan="4" style="opacity:.7">尚無紀錄</td></tr>`;
-    el.thTeamL.textContent=state.teamL+'（投手）';
-    el.thTeamR.textContent=state.teamR+'（投手）';
+    el.logBody.innerHTML = html || `<tr><td colspan="6" style="opacity:.7">尚無紀錄</td></tr>`;
   }
 
   function setLights(row,count,max,color){
@@ -552,6 +604,10 @@
     setLights(el.rowB,Math.min(state.ball,3),3,B_ON);
     setLights(el.rowO,Math.min(state.out,2),2,O_ON);
 
+    // 打者站位按鈕亮燈
+    el.btnLeftBat.classList.toggle('active', state.stance==='左打');
+    el.btnRightBat.classList.toggle('active', state.stance==='右打');
+
     el.pMinus.classList.toggle('hidden',!state.edit_mode);
     el.pPlus.classList.toggle('hidden',!state.edit_mode);
     el.scoreAdjust.classList.toggle('hidden',!state.edit_mode);
@@ -582,6 +638,10 @@
     });
   });
 
+  // 打者站位切換（互斥、恆亮）
+  el.btnLeftBat.addEventListener('click', ()=>{ state.stance='左打'; updateAll(); });
+  el.btnRightBat.addEventListener('click',()=>{ state.stance='右打'; updateAll(); });
+
   el.btnEdit.addEventListener('click',()=>{
     state.edit_mode=!state.edit_mode;
     el.btnEdit.textContent=state.edit_mode?'完成':'編輯';
@@ -600,7 +660,7 @@
     state.score[off]=(state.score[off]||0)+1; updateAll(); });
   el.sMinus.addEventListener('click',()=>{ if(!state.edit_mode) return;
     pushHistory(); const off=currentOffense();
-    state.score[off]=Math.max(0,(state.score[off]||0)-1); updateAll(); });
+    state.score[off]=Math.max(0, (state.score[off] || 0) - 1); updateAll(); });
 
   // 編輯：點壘包切換佔壘
   [el.b1,el.b2,el.b3].forEach((node,idx)=>{
@@ -613,11 +673,24 @@
   // 復原上一步
   el.btnUndo.addEventListener('click',()=>{ undoLast(); });
 
-  // 匯出 CSV（適用 GitHub Pages）
+  // 匯出 CSV（欄位依需求）
   el.btnExport.addEventListener('click', ()=>{
-    const rows = [['局數','半','投手隊','事件','左分','右分']];
+    const rows = [[
+      '局數',
+      '先守隊伍名稱（投手）',
+      '先功隊伍名稱（打擊）',
+      '先功隊伍名稱（投手）',
+      '先守隊伍名稱（打擊）',
+      '比分'
+    ]];
     state.logs.timeline.forEach(e=>{
-      rows.push([e.inning, e.half, e.pitcherTeam, e.label, e.scoreL, e.scoreR]);
+      const isTop = (e.half==='上'); // 上=先攻打
+      const col1 = isTop ? e.label : '';
+      const col2 = isTop ? e.stance: '';
+      const col3 = isTop ? ''       : e.label;
+      const col4 = isTop ? ''       : e.stance;
+      const scoreStr = `${e.scoreL}：${e.scoreR}`;
+      rows.push([e.inning, col1, col2, col3, col4, scoreStr]);
     });
     const csv = rows.map(r => r.map(v => `"${String(v).replace(/"/g,'""')}"`).join(',')).join('\r\n');
     const blob = new Blob([csv], {type: 'text/csv;charset=utf-8;'});
@@ -637,6 +710,7 @@
     state.pitch_team[off]=0; state.pitch_team[def]=0;
     state.score[off]=0; state.score[def]=0;
     state.bases=[false,false,false]; state.game_over=false; state.logs={timeline:[]};
+    // 保留既有 stance；若要重設可在此指定 state.stance='右打';
     closeSetup(); updateAll();
   });
   function openSetup(){ el.inTeamOff.value=state.teamL; el.inTeamDef.value=state.teamR; el.setup.classList.remove('hidden'); }
@@ -645,7 +719,7 @@
   // 初始渲染
   updateAll();
 
-  // PWA（GitHub Pages 可用；確保 service-worker.js 與 index.html 同資料夾）
+  // PWA（GitHub Pages 可用）
   if('serviceWorker' in navigator){
     window.addEventListener('load',()=>navigator.serviceWorker.register('service-worker.js'));
   }
