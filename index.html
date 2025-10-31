@@ -49,6 +49,7 @@
     .home{position:absolute;left:120px;top:170px;width:24px;height:18px;background:white;
       clip-path:polygon(50% 100%, 0 0, 100% 0)}
     .pitch{font-size:18px;font-weight:800}
+    .pa-line{font-size:14px;margin-top:6px;display:flex;align-items:center;gap:8px}
     .endbanner{color:var(--o-on);font-weight:900;font-size:18px;text-align:center;min-height:26px}
     .hidden{display:none!important;}
     .scoretbl{width:100%;border-collapse:collapse}
@@ -65,6 +66,7 @@
       align-items:center;justify-content:center;z-index:50;}
     .setup .card{width:min(680px,92vw);background:var(--panel);border-radius:16px;
       padding:18px;box-shadow:0 10px 30px rgba(0,0,0,.5)}
+    .pitch-line {display: flex;align-items: center;gap: 8px;}
   </style>
 </head>
 <body>
@@ -83,7 +85,7 @@
 
     <div class="row" style="margin-top:10px;gap:20px">
       <div>
-        <!-- 新增：打擊站位切換（恆亮） -->
+        <!-- 打者站位切換（恆亮） -->
         <div class="lights-row" id="rowStance" style="justify-content:flex-start">
           <button id="btnLeftBat"  class="btn toggle">左打</button>
           <button id="btnRightBat" class="btn toggle">右打</button>
@@ -119,9 +121,19 @@
 
     <div class="row" style="margin-top:8px;justify-content:space-between">
       <div class="pitchbox">
-        <div id="pitch" class="pitch mono"></div>
-        <button id="pMinus" class="btn hidden">-</button>
-        <button id="pPlus" class="btn hidden">+</button>
+        <!-- 新增包一層 pitch-line，讓按鈕排在 PITCH 文字右側 -->
+        <div id="pitchLine" class="pitch-line">
+            <div id="pitch" class="pitch mono"></div>
+            <button id="pMinus" class="btn hidden">-</button>
+            <button id="pPlus" class="btn hidden">+</button>
+        </div>
+
+        <!-- 原本的累計打席區保持不變 -->
+        <div id="paLine" class="pa-line">
+            <span id="paLabel">累計打席 先攻隊伍：0</span>
+            <button id="paMinus" class="btn hidden">-</button>
+            <button id="paPlus"  class="btn hidden">+</button>
+        </div>
       </div>
       <div style="min-width:260px" class="scorebox">
         <div id="gameover" class="endbanner"></div>
@@ -230,7 +242,8 @@
     bases:[false,false,false],
     edit_mode:false,game_over:false,
     logs: JSON.parse(localStorage.getItem('logs')||'{"timeline":[]}'),
-    stance: localStorage.getItem('stance') || '右打', // 新增：打者站位
+    stance: localStorage.getItem('stance') || '右打',
+    innings: JSON.parse(localStorage.getItem('innings')||'[]') // 方案A：每局 top/bottom PA 陣列
   };
 
   const el={
@@ -247,6 +260,9 @@
     pitch:document.getElementById('pitch'),
     pMinus:document.getElementById('pMinus'),
     pPlus:document.getElementById('pPlus'),
+    paLabel:document.getElementById('paLabel'),
+    paMinus:document.getElementById('paMinus'),
+    paPlus:document.getElementById('paPlus'),
     teamA:document.getElementById('teamA'),
     teamB:document.getElementById('teamB'),
     scoreA:document.getElementById('scoreA'),
@@ -277,6 +293,14 @@
   state.score[L]=parseInt(localStorage.getItem('score_'+L)||'0',10);
   state.score[R]=parseInt(localStorage.getItem('score_'+R)||'0',10);
 
+  // 初始化 innings 結構
+  function ensureInningStruct(n){
+    while(state.innings.length < n){
+      state.innings.push({inning: state.innings.length+1, top:[], bottom:[]});
+    }
+  }
+  ensureInningStruct(state.inning);
+
   if(!localStorage.getItem('teamL')||!localStorage.getItem('teamR')) openSetup();
 
   el.teamA.textContent=state.teamL;
@@ -295,10 +319,26 @@
     localStorage.setItem('stance',state.stance);
   }
   function saveLogs(){ localStorage.setItem('logs', JSON.stringify(state.logs)); }
+  function saveInnings(){ localStorage.setItem('innings', JSON.stringify(state.innings)); }
   function addPitch(def){ state.pitch_team[def]=(state.pitch_team[def]||0)+1; }
   function clearCounts(){ state.strike=0; state.ball=0; }
   function currentOffense(){ return state.top?state.teamL:state.teamR; }
   function currentDefense(){ return state.top?state.teamR:state.teamL; }
+  function currentHalfArray(){
+    ensureInningStruct(state.inning);
+    const idx=state.inning-1;
+    return state.top ? state.innings[idx].top : state.innings[idx].bottom;
+  }
+
+  // 計算某隊整場累計 PA（先攻=各局top總和；先守=各局bottom總和）
+  function totalPAs(team){
+    let sum=0;
+    state.innings.forEach(inn=>{
+      if(team===state.teamL) sum += inn.top.length;
+      else if(team===state.teamR) sum += inn.bottom.length;
+    });
+    return sum;
+  }
 
   /* ====== Undo ====== */
   const historyStack=[];
@@ -306,7 +346,7 @@
   function pushHistory(){ historyStack.push(snapshotState()); }
   function undoLast(){
     const prev=historyStack.pop(); if(!prev) return;
-    Object.assign(state, prev); saveBasics(); saveLogs(); updateAll();
+    Object.assign(state, prev); saveBasics(); saveLogs(); saveInnings(); updateAll();
   }
 
   /* 跑者前進 n 壘（不含打者） */
@@ -330,20 +370,55 @@
     }
     return false;
   }
-  function endGame(){ state.game_over=true; saveBasics(); updateAll(); }
+
+  function endGame(){
+    state.game_over=true;
+    const pitchL = state.pitch_team[state.teamL]||0;
+    const pitchR = state.pitch_team[state.teamR]||0;
+    const paL = totalPAs(state.teamL);
+    const paR = totalPAs(state.teamR);
+    saveBasics(); saveInnings();
+    updateAll();
+    el.gameover.textContent =
+      `比賽結束！  ${state.teamL}：PITCH ${pitchL}／PA ${paL}　|　${state.teamR}：PITCH ${pitchR}／PA ${paR}`;
+  }
 
   function changeSide(){
     if(state.game_over) return;
     state.out=0; state.strike=0; state.ball=0; state.bases=[false,false,false];
     if(state.top){
       state.top=false;
-      // ⚠️ 修正：九局上半不提前結束（不做「攻方領先就結束」的判斷）
     }else{
       const finished=state.inning; state.top=true;
       if(finished>=9 && state.score[state.teamL]!==state.score[state.teamR]){ endGame(); return; }
       state.inning+=1;
+      ensureInningStruct(state.inning);
     }
     saveBasics(); updateAll();
+  }
+
+  /* ====== 打席結束 → 紀錄到方案A（innings） ====== */
+  function pushPAFromLastEvent(reasonTag){
+    for(let i=state.logs.timeline.length-1;i>=0;i--){
+      const e=state.logs.timeline[i];
+      if(e && !e.sep){
+        const paObj={
+          summary: e.label||reasonTag||'結果',
+          stance:  e.stance||'',
+          scoreL:  e.scoreL||0,
+          scoreR:  e.scoreR||0,
+          manual:  false,
+          reason:  reasonTag||''
+        };
+        currentHalfArray().push(paObj);
+        saveInnings();
+        return;
+      }
+    }
+    currentHalfArray().push({
+      summary: reasonTag||'結果', stance:'', scoreL:state.score[state.teamL]||0, scoreR:state.score[state.teamR]||0, manual:false
+    });
+    saveInnings();
   }
 
   /* ====== 事件 ====== */
@@ -360,12 +435,12 @@
     else { scoreAdd+=1; }
     state.bases=newBases; state.score[currentOffense()]+=scoreAdd; clearCounts();
     logEvent(n===1?'一壘安打':n===2?'二壘安打':n===3?'三壘安打':'全壘打');
+    pushPAFromLastEvent('hit');
     if(maybeWalkoff(scoreAdd)) { saveBasics(); updateAll(); return; }
     saveBasics(); updateAll();
   }
   function groundRuleDouble(){ hit(2); }
 
-  // 三振
   function addStrike(){
     if(state.edit_mode||state.game_over) return;
     pushHistory(); addPitch(currentDefense());
@@ -373,6 +448,7 @@
     if(state.strike>=3){
       state.strike=0; state.ball=0; state.out+=1;
       logEvent('三振');
+      pushPAFromLastEvent('strikeout');
       if(state.out>=3){ saveBasics(); changeSide(); return; }
     }else{
       logEvent('好球');
@@ -380,13 +456,11 @@
     saveBasics(); updateAll();
   }
 
-  // ⚠️ 修正：保送邏輯（打者上一壘；僅在重疊時擠進）
   function addBall(){
     if(state.edit_mode||state.game_over) return;
     pushHistory(); addPitch(currentDefense());
     state.ball+=1; logEvent('壞球');
     if(state.ball>=4){
-      // force-advance walk
       let [b1,b2,b3] = state.bases;
       let scoreAdd = 0;
       if (b1){
@@ -398,7 +472,9 @@
       }
       b1 = true;
       state.bases = [b1,b2,b3];
+      if (scoreAdd) state.score[currentOffense()] += scoreAdd;
       clearCounts(); logEvent('保送');
+      pushPAFromLastEvent('walk');
       if(maybeWalkoff(scoreAdd)) { saveBasics(); updateAll(); return; }
     }
     saveBasics(); updateAll();
@@ -409,39 +485,32 @@
     pushHistory(); addPitch(currentDefense());
     if(lbl) logEvent(lbl);
     state.strike=0; state.ball=0; state.out+=1;
+    pushPAFromLastEvent('out');
     if(state.out>=3){ saveBasics(); changeSide(); return; }
     saveBasics(); updateAll();
   }
 
-  /* === 觸身球：只讓打者上一壘；若壘被占用才連鎖擠進（可能得分） === */
   function hbp(){
     if(state.edit_mode||state.game_over) return;
     pushHistory(); addPitch(currentDefense());
-
-    let b1 = state.bases[0];
-    let b2 = state.bases[1];
-    let b3 = state.bases[2];
+    let [b1,b2,b3] = state.bases;
     let scoreAdd = 0;
-
-    if (b1) {
-      if (b2) {
-        if (b3) { scoreAdd += 1; }
+    if (b1){
+      if (b2){
+        if (b3){ scoreAdd += 1; }
         b3 = true;
       }
       b2 = true;
     }
     b1 = true;
-    state.bases = [b1, b2, b3];
-
+    state.bases = [b1,b2,b3];
     if (scoreAdd) state.score[currentOffense()] += scoreAdd;
-    clearCounts();
-    logEvent('觸身球');
-
+    clearCounts(); logEvent('觸身球');
+    pushPAFromLastEvent('hbp');
     if(maybeWalkoff(scoreAdd)) { saveBasics(); updateAll(); return; }
     saveBasics(); updateAll();
   }
 
-  // 界外：第三好球由界外取得 → 界外三振（依你需求）
   function foul(){
     if(state.edit_mode||state.game_over) return;
     pushHistory(); addPitch(currentDefense());
@@ -449,6 +518,7 @@
     if(state.strike>=3){
       state.strike=0; state.ball=0; state.out+=1;
       logEvent('界外三振');
+      pushPAFromLastEvent('foulK');
       if(state.out>=3){ saveBasics(); changeSide(); return; }
     }else{
       logEvent('界外球');
@@ -456,15 +526,11 @@
     saveBasics(); updateAll();
   }
 
-  // ⚠️ 修正：WP 造成四壞時，改用保送的擠進邏輯（不使用 advanceRunners 直接推進）
   function wp(){
     if(state.edit_mode||state.game_over) return;
     pushHistory(); addPitch(currentDefense());
-    // 先暴投：跑者推進一個壘包
     const scoredFromWP = advanceRunners(1);
     logEvent('暴投');
-
-    // 暴投同時算一顆壞球
     state.ball += 1;
     let extraScore = 0;
     if(state.ball>=4){
@@ -478,18 +544,20 @@
       }
       b1 = true;
       state.bases = [b1,b2,b3];
+      if (extraScore) state.score[currentOffense()] += extraScore;
       clearCounts(); logEvent('保送');
+      pushPAFromLastEvent('walk-wp');
     }
     if(maybeWalkoff(scoredFromWP + extraScore)) { saveBasics(); updateAll(); return; }
     saveBasics(); updateAll();
   }
 
-  // ⚠️ 修正：避免投球數 +2（由 hit(1) 計一次，最後改事件字串）
   function errorHit(){
     if(state.edit_mode||state.game_over) return;
     pushHistory();
-    hit(1); // 只由 hit() 內部加一次 Pitch
-    state.logs.timeline[state.logs.timeline.length-1].label='失誤';
+    hit(1);
+    const arr = currentHalfArray();
+    if(arr.length>0){ arr[arr.length-1].summary='失誤'; saveInnings(); }
     saveBasics(); updateAll();
   }
 
@@ -499,11 +567,13 @@
     const willOut = state.out + 1;
     if(willOut >= 3){
       state.out = willOut; clearCounts(); logEvent('短打成功');
+      pushPAFromLastEvent('sac-bunt');
       saveBasics(); changeSide(); return;
     }
     state.out = willOut;
     const scored = advanceRunners(1);
     clearCounts(); logEvent('短打成功');
+    pushPAFromLastEvent('sac-bunt');
     if(state.out >= 3){ saveBasics(); changeSide(); return; }
     if(maybeWalkoff(scored)) { saveBasics(); updateAll(); return; }
     saveBasics(); updateAll();
@@ -517,8 +587,8 @@
       half:state.top?'上':'下',
       offenseTeam: off,
       defenseTeam: def,
-      stance: state.stance, // 左打 / 右打
-      label:lbl,            // 投手事件字串
+      stance: state.stance,
+      label:lbl,
       scoreL:state.score[state.teamL]||0,
       scoreR:state.score[state.teamR]||0
     });
@@ -526,20 +596,19 @@
   }
 
   function renderLog(){
-    // 動態表頭（固定角色：先攻=teamL；先守=teamR）
     el.thDefPitch.textContent = `${state.teamR}（投手）`;
     el.thOffBat.textContent   = `${state.teamL}（打擊）`;
     el.thOffPitch.textContent = `${state.teamL}（投手）`;
     el.thDefBat.textContent   = `${state.teamR}（打擊）`;
 
-    // 逐列輸出
     let html='';
     for(const e of state.logs.timeline){
-      const isTop = (e.half==='上'); // 上=先攻(L)打、先守(R)投
-      const col1 = isTop ? e.label : '';          // 先守隊伍（投手）
-      const col2 = isTop ? e.stance: '';          // 先攻隊伍（打擊）
-      const col3 = isTop ? ''       : e.label;    // 先攻隊伍（投手）
-      const col4 = isTop ? ''       : e.stance;   // 先守隊伍（打擊）
+      if(e.sep){ continue; }
+      const isTop = (e.half==='上');
+      const col1 = isTop ? e.label : '';
+      const col2 = isTop ? e.stance: '';
+      const col3 = isTop ? ''       : e.label;
+      const col4 = isTop ? ''       : e.stance;
       const scoreStr = `${e.scoreL}：${e.scoreR}`;
       html+=`<tr>
         <td class="inning">${e.inning}</td>
@@ -587,9 +656,14 @@
     if(!state.game_over){
       el.gameover.textContent="";
       el.pitch.textContent=`PITCH ${currentDefense()}: ${state.pitch_team[currentDefense()]||0}`;
-    }else{
-      el.gameover.textContent="比賽結束！";
     }
+
+    // ===== 累計打席顯示（整場累計；顯示目前攻擊方隊名） =====
+    const offenseTeam = currentOffense();
+    const paCountTotal = totalPAs(offenseTeam); // 整場累積
+    el.paLabel.textContent = `累計打席 ${offenseTeam}：${paCountTotal}`;
+    el.paMinus.classList.toggle('hidden', !state.edit_mode);
+    el.paPlus.classList.toggle('hidden', !state.edit_mode);
 
     document.getElementById('b1').style.background = state.bases[0] ? S_ON : OFF;
     document.getElementById('b2').style.background = state.bases[1] ? S_ON : OFF;
@@ -604,7 +678,6 @@
     setLights(el.rowB,Math.min(state.ball,3),3,B_ON);
     setLights(el.rowO,Math.min(state.out,2),2,O_ON);
 
-    // 打者站位按鈕亮燈
     el.btnLeftBat.classList.toggle('active', state.stance==='左打');
     el.btnRightBat.classList.toggle('active', state.stance==='右打');
 
@@ -638,7 +711,6 @@
     });
   });
 
-  // 打者站位切換（互斥、恆亮）
   el.btnLeftBat.addEventListener('click', ()=>{ state.stance='左打'; updateAll(); });
   el.btnRightBat.addEventListener('click',()=>{ state.stance='右打'; updateAll(); });
 
@@ -655,6 +727,7 @@
   el.pMinus.addEventListener('click',()=>{ if(!state.edit_mode) return;
     pushHistory(); const def=currentDefense();
     state.pitch_team[def]=Math.max(0,(state.pitch_team[def]||0)-1); updateAll(); });
+
   el.sPlus.addEventListener('click',()=>{ if(!state.edit_mode) return;
     pushHistory(); const off=currentOffense();
     state.score[off]=(state.score[off]||0)+1; updateAll(); });
@@ -662,8 +735,25 @@
     pushHistory(); const off=currentOffense();
     state.score[off]=Math.max(0, (state.score[off] || 0) - 1); updateAll(); });
 
+  // 編輯：PA 手動調整（只動目前半局的陣列尾端；顯示的是整場累計）
+  el.paPlus.addEventListener('click',()=>{ if(!state.edit_mode) return;
+    pushHistory();
+    currentHalfArray().push({
+      summary:'X', stance:'X',
+      scoreL: state.score[state.teamL]||0,
+      scoreR: state.score[state.teamR]||0,
+      manual:true
+    });
+    saveInnings(); updateAll();
+  });
+  el.paMinus.addEventListener('click',()=>{ if(!state.edit_mode) return;
+    const arr=currentHalfArray(); if(arr.length===0) return;
+    pushHistory();
+    arr.pop(); saveInnings(); updateAll();
+  });
+
   // 編輯：點壘包切換佔壘
-  [el.b1,el.b2,el.b3].forEach((node,idx)=>{
+  ;[document.getElementById('b1'),document.getElementById('b2'),document.getElementById('b3')].forEach((node,idx)=>{
     node.style.cursor='pointer';
     node.title='編輯模式：點擊切換佔壘';
     node.addEventListener('click',()=>{ if(!state.edit_mode) return;
@@ -673,18 +763,14 @@
   // 復原上一步
   el.btnUndo.addEventListener('click',()=>{ undoLast(); });
 
-  // 匯出 CSV（欄位依需求）
+  // 匯出 CSV（保留逐球）
   el.btnExport.addEventListener('click', ()=>{
     const rows = [[
-      '局數',
-      '先守隊伍名稱（投手）',
-      '先功隊伍名稱（打擊）',
-      '先功隊伍名稱（投手）',
-      '先守隊伍名稱（打擊）',
-      '比分'
+      '局數','先守隊伍名稱（投手）','先功隊伍名稱（打擊）','先功隊伍名稱（投手）','先守隊伍名稱（打擊）','比分'
     ]];
     state.logs.timeline.forEach(e=>{
-      const isTop = (e.half==='上'); // 上=先攻打
+      if(e.sep) return;
+      const isTop = (e.half==='上');
       const col1 = isTop ? e.label : '';
       const col2 = isTop ? e.stance: '';
       const col3 = isTop ? ''       : e.label;
@@ -709,8 +795,10 @@
     state.inning=1; state.top=true; state.strike=0; state.ball=0; state.out=0;
     state.pitch_team[off]=0; state.pitch_team[def]=0;
     state.score[off]=0; state.score[def]=0;
-    state.bases=[false,false,false]; state.game_over=false; state.logs={timeline:[]};
-    // 保留既有 stance；若要重設可在此指定 state.stance='右打';
+    state.bases=[false,false,false]; state.game_over=false;
+    state.logs={timeline:[]};
+    state.innings=[{inning:1, top:[], bottom:[]}];
+    saveInnings();
     closeSetup(); updateAll();
   });
   function openSetup(){ el.inTeamOff.value=state.teamL; el.inTeamDef.value=state.teamR; el.setup.classList.remove('hidden'); }
