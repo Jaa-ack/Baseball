@@ -7,6 +7,8 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <link rel="manifest" href="manifest.json">
   <link rel="apple-touch-icon" href="icons/icon-192.png">
+  <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
+  <link rel="icon" type="image/png" sizes="512x512" href="icons/icon-512.png">
   <title>棒球比賽紀錄器 PWA</title>
   <style>
     :root{
@@ -68,6 +70,19 @@
       padding:18px;box-shadow:0 10px 30px rgba(0,0,0,.5)}
     .pitch-line {display: flex;align-items: center;gap: 8px;}
   </style>
+
+  <style>
+    /* === Fixed‑ratio stage that scales to fit the phone === */
+    .stage{
+      margin:0 auto;
+      transform-origin: top center;
+      /* Prevent blur on some mobile browsers when scaled */
+      -webkit-transform-origin: top center;
+    }
+    /* When installed as PWA on notched phones, keep content away from edges */
+    body{padding-bottom: max(env(safe-area-inset-bottom), 0px);}
+  </style>
+
 </head>
 <body>
 <div class="wrap">
@@ -209,14 +224,14 @@
 <div id="setup" class="setup hidden">
   <div class="card">
     <h2>賽前設定</h2>
-    <p class="subtle">請輸入兩隊名稱並指定左側為先攻、右側為先守。</p>
+    <p class="subtle">請輸入兩隊名稱</p>
     <div class="teams-flex">
       <div class="teamcard">
-        <h4>左：先攻隊伍</h4>
+        <h4>先攻隊伍名稱</h4>
         <div class="fld"><input id="inTeamOff" placeholder="先攻隊伍"></div>
       </div>
       <div class="teamcard">
-        <h4>右：先守隊伍</h4>
+        <h4>先守隊伍名稱</h4>
         <div class="fld"><input id="inTeamDef" placeholder="先守隊伍"></div>
       </div>
     </div>
@@ -813,5 +828,57 @@
   }
 })();
 </script>
+
+<script>
+// === Fit-to-screen scaling without breaking desktop proportions ===
+(function(){
+  function initStage(){
+    var wrap = document.querySelector('.wrap');
+    if(!wrap) return;
+    // Create stage and wrap existing content so proportions remain identical to desktop.
+    var stage = document.createElement('div');
+    stage.className = 'stage';
+    wrap.parentNode.insertBefore(stage, wrap);
+    stage.appendChild(wrap);
+
+    // Measure the "design size" from desktop layout (before any scaling)
+    // Use max width from CSS (980px) as the design width fallback.
+    var designW = 980;
+    // Temporarily clear transforms to get natural height
+    stage.style.transform = 'none';
+    stage.style.width = designW + 'px';
+    // Force a reflow then measure height
+    var designH = stage.offsetHeight || wrap.offsetHeight;
+
+    function fit(){
+      // Available viewport
+      var vw = document.documentElement.clientWidth;
+      var vh = window.innerHeight;
+
+      // Compute uniform scale so the entire app fits both width/height
+      var sx = vw / designW;
+      var sy = vh / designH;
+      var scale = Math.min(sx, sy, 1); // never scale up beyond desktop size
+
+      stage.style.width  = designW + 'px';
+      stage.style.height = designH + 'px';
+      stage.style.transform = 'scale(' + scale + ')';
+    }
+
+    window.addEventListener('resize', fit, {passive:true});
+    window.addEventListener('orientationchange', fit, {passive:true});
+    // Some mobile browsers need a delayed re-fit after fonts load
+    window.addEventListener('load', fit);
+    setTimeout(fit, 50);
+  }
+
+  if (document.readyState === 'loading'){
+    document.addEventListener('DOMContentLoaded', initStage);
+  }else{
+    initStage();
+  }
+})();
+</script>
+
 </body>
 </html>
