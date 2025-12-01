@@ -5,6 +5,7 @@
   <title>棒球比賽紀錄器 Pro</title>
   
   <!-- PWA & Mobile Meta Tags -->
+  <!-- 關鍵修正：移除強制縮放，讓版面自適應 -->
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -46,6 +47,7 @@
       display: flex;
       flex-direction: column;
       overflow: hidden;
+      /* 關鍵修正：防止 iOS 下拉重新整理導致資料遺失 */
       overscroll-behavior-y: none;
     }
 
@@ -81,6 +83,7 @@
       padding: 8px 10px;
       background: #2a2a2a;
       border-bottom: 1px solid #000;
+      flex-shrink: 0; /* 防止計分板被擠壓 */
     }
     .team-box { text-align: center; }
     .team-name { font-size: 0.8rem; color: var(--text-muted); display: block; margin-bottom: 2px; }
@@ -91,13 +94,14 @@
     .arrow-down { width: 0; height: 0; border-left: 5px solid transparent; border-right: 5px solid transparent; border-top: 8px solid var(--text-muted); }
     .outs-display { margin-top: 4px; font-size: 0.8rem; color: var(--out); font-weight: bold; letter-spacing: 1px; }
 
-    /* Tools Bar (Settings & Stats) - NEW LOCATION */
+    /* Tools Bar (Settings & Stats) */
     .tools-bar {
       display: flex;
-      justify-content: space-between; /* Spread apart */
+      justify-content: space-between;
       background: #222;
       padding: 6px 20px;
       border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
     }
     .tool-btn {
       background: #333;
@@ -122,6 +126,7 @@
       background: #1a1a1a;
       font-size: 0.8rem;
       border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
     }
     .sbo-group { display: flex; align-items: center; gap: 3px; }
     .dot { width: 8px; height: 8px; border-radius: 50%; background: #444; box-shadow: inset 0 0 2px #000; transition: background 0.2s; }
@@ -131,13 +136,14 @@
 
     /* Field View */
     .field-wrapper {
-      flex: 1;
+      flex: 1; /* 自適應高度，填滿剩餘空間 */
       background: var(--field-bg);
       position: relative;
       display: flex;
       justify-content: center;
       align-items: center;
-      min-height: 180px;
+      min-height: 150px;
+      overflow: hidden; /* 防止 SVG 溢出 */
     }
     .diamond-svg { width: 100%; height: 100%; max-width: 320px; padding: 10px; }
     .base { fill: var(--base-empty); stroke: rgba(255,255,255,0.5); stroke-width: 2; transition: fill 0.3s; cursor: pointer; }
@@ -152,6 +158,7 @@
       padding: 6px 12px;
       font-size: 0.85rem;
       font-family: monospace;
+      flex-shrink: 0;
     }
     .log-item { margin-bottom: 2px; border-bottom: 1px solid #222; padding-bottom: 2px; color: #ccc; }
     .log-item:first-child { color: var(--accent); font-weight: bold; border-bottom: none; }
@@ -164,6 +171,8 @@
       grid-template-columns: repeat(4, 1fr);
       gap: 6px;
       flex-shrink: 0;
+      /* 關鍵修正：增加底部 padding 避開 iPhone 下方橫條 */
+      padding-bottom: calc(8px + var(--safe-area-bottom));
     }
 
     button {
@@ -193,7 +202,7 @@
     .btn-out { color: var(--out); border-color: var(--out); }
     .btn-hit { background: #2c3e50; border-color: #34495e; font-weight: bold; color: #fff; }
     .btn-special { color: #aaa; }
-    .btn-undo { grid-column: span 1; background: #444; color: #fff; border-color: #666; }
+    .btn-undo { grid-column: span 2; background: #444; color: #fff; border-color: #666; }
 
     /* Modals */
     .modal {
@@ -242,7 +251,7 @@
       .left-col { flex: 1.5; display: flex; flex-direction: column; border-right: 1px solid var(--border); }
       .right-col { flex: 1; display: flex; flex-direction: column; background: var(--panel-bg); }
       .field-wrapper { flex: 1; min-height: 0; }
-      .controls { padding: 20px; gap: 10px; grid-template-columns: repeat(4, 1fr); }
+      .controls { padding: 20px; gap: 10px; grid-template-columns: repeat(4, 1fr); padding-bottom: 20px; }
       .log-container { flex: 1; height: auto; border-bottom: 1px solid var(--border); border-top: none; }
       header { display: none; }
     }
@@ -263,7 +272,6 @@
   <div class="modal-content">
     <div class="modal-header">
       <h2>比賽設定</h2>
-      <!-- New Close Button -->
       <button class="close-btn" onclick="app.closeModal('setupModal')">×</button>
     </div>
     <div class="form-group">
@@ -779,6 +787,7 @@
     },
 
     saveState() {
+      // 關鍵修正：限制歷史紀錄長度，防止記憶體溢出
       this.state.history.push(JSON.parse(JSON.stringify(this.state)));
       if (this.state.history.length > 50) this.state.history.shift();
     },
@@ -842,6 +851,11 @@
       const innStr = `${this.state.inning}${this.state.isTop ? '上' : '下'}`;
       div.textContent = `[${innStr}] ${text}`;
       this.ui.playLog.insertBefore(div, this.ui.playLog.firstChild);
+      
+      // 關鍵修正：限制顯示紀錄的條數，防止 DOM 過多導致崩潰
+      if (this.ui.playLog.children.length > 50) {
+        this.ui.playLog.removeChild(this.ui.playLog.lastChild);
+      }
     },
 
     updateUI() {
