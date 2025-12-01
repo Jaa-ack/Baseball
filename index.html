@@ -1,0 +1,869 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <title>棒球比賽紀錄器 Pro</title>
+  
+  <!-- PWA & Mobile Meta Tags -->
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="theme-color" content="#1B3B2A">
+  <meta name="format-detection" content="telephone=no">
+  <meta name="description" content="專業的棒球比賽紀錄 PWA，支援詳細數據統計">
+
+  <link rel="manifest" href="manifest.json">
+  <link rel="apple-touch-icon" href="icons/icon-192.png">
+
+  <style>
+    /* --- CSS Variables & Reset --- */
+    :root {
+      --bg-color: #121212;
+      --field-bg: #1B3B2A;
+      --panel-bg: #1e1e1e;
+      --text-main: #ffffff;
+      --text-muted: #aaaaaa;
+      --accent: #FFC107;
+      --strike: #ffeb3b;
+      --ball: #4caf50;
+      --out: #f44336;
+      --base-empty: rgba(255, 255, 255, 0.3);
+      --base-full: #ff5722;
+      --border: #333;
+      --safe-area-top: env(safe-area-inset-top, 0px);
+      --safe-area-bottom: env(safe-area-inset-bottom, 20px);
+    }
+
+    * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; user-select: none; }
+    
+    body {
+      margin: 0;
+      padding: 0;
+      background-color: var(--bg-color);
+      color: var(--text-main);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      overscroll-behavior-y: none;
+    }
+
+    /* --- Layout --- */
+    #app-container {
+      display: flex;
+      flex-direction: column;
+      height: 100%;
+      padding-top: var(--safe-area-top);
+      padding-bottom: var(--safe-area-bottom);
+    }
+
+    /* Header (Simple Title) */
+    header {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      padding: 8px 16px;
+      background: #222;
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+    }
+    h1 { margin: 0; font-size: 1rem; font-weight: 700; color: var(--accent); letter-spacing: 1px; }
+
+    /* Main Content */
+    main { flex: 1; display: flex; flex-direction: column; overflow: hidden; position: relative; }
+
+    /* Scoreboard */
+    .scoreboard {
+      display: grid;
+      grid-template-columns: 1fr auto 1fr;
+      gap: 10px;
+      padding: 8px 10px;
+      background: #2a2a2a;
+      border-bottom: 1px solid #000;
+    }
+    .team-box { text-align: center; }
+    .team-name { font-size: 0.8rem; color: var(--text-muted); display: block; margin-bottom: 2px; }
+    .team-score { font-size: 2.2rem; font-weight: 800; line-height: 1; }
+    .inning-box { display: flex; flex-direction: column; justify-content: center; align-items: center; min-width: 70px; }
+    .inning-num { font-size: 1.1rem; font-weight: bold; display: flex; align-items: center; gap: 4px; }
+    .arrow-up { width: 0; height: 0; border-left: 5px solid transparent; border-right: 5px solid transparent; border-bottom: 8px solid var(--accent); }
+    .arrow-down { width: 0; height: 0; border-left: 5px solid transparent; border-right: 5px solid transparent; border-top: 8px solid var(--text-muted); }
+    .outs-display { margin-top: 4px; font-size: 0.8rem; color: var(--out); font-weight: bold; letter-spacing: 1px; }
+
+    /* Tools Bar (Settings & Stats) - NEW LOCATION */
+    .tools-bar {
+      display: flex;
+      justify-content: space-between; /* Spread apart */
+      background: #222;
+      padding: 6px 20px;
+      border-bottom: 1px solid var(--border);
+    }
+    .tool-btn {
+      background: #333;
+      color: #ccc;
+      border: 1px solid #444;
+      padding: 4px 12px;
+      border-radius: 4px;
+      font-size: 0.85rem;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 5px;
+    }
+    .tool-btn:active { background: #555; color: #fff; }
+
+    /* SBO Indicators */
+    .sbo-container {
+      display: flex;
+      justify-content: center;
+      gap: 15px;
+      padding: 6px 0;
+      background: #1a1a1a;
+      font-size: 0.8rem;
+      border-bottom: 1px solid var(--border);
+    }
+    .sbo-group { display: flex; align-items: center; gap: 3px; }
+    .dot { width: 8px; height: 8px; border-radius: 50%; background: #444; box-shadow: inset 0 0 2px #000; transition: background 0.2s; }
+    .dot.active-b { background: var(--ball); box-shadow: 0 0 4px var(--ball); }
+    .dot.active-s { background: var(--strike); box-shadow: 0 0 4px var(--strike); }
+    .dot.active-o { background: var(--out); box-shadow: 0 0 4px var(--out); }
+
+    /* Field View */
+    .field-wrapper {
+      flex: 1;
+      background: var(--field-bg);
+      position: relative;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 180px;
+    }
+    .diamond-svg { width: 100%; height: 100%; max-width: 320px; padding: 10px; }
+    .base { fill: var(--base-empty); stroke: rgba(255,255,255,0.5); stroke-width: 2; transition: fill 0.3s; cursor: pointer; }
+    .base.occupied { fill: var(--base-full); stroke: #fff; }
+
+    /* Log Area */
+    .log-container {
+      height: 60px;
+      background: #111;
+      border-top: 1px solid var(--border);
+      overflow-y: auto;
+      padding: 6px 12px;
+      font-size: 0.85rem;
+      font-family: monospace;
+    }
+    .log-item { margin-bottom: 2px; border-bottom: 1px solid #222; padding-bottom: 2px; color: #ccc; }
+    .log-item:first-child { color: var(--accent); font-weight: bold; border-bottom: none; }
+
+    /* Controls Grid */
+    .controls {
+      background: var(--panel-bg);
+      padding: 8px;
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 6px;
+      flex-shrink: 0;
+    }
+
+    button {
+      background: #333;
+      color: #fff;
+      border: 1px solid #444;
+      border-radius: 6px;
+      padding: 12px 0;
+      font-size: 0.95rem;
+      font-weight: 500;
+      cursor: pointer;
+      position: relative;
+      overflow: hidden;
+      touch-action: manipulation;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      line-height: 1.1;
+    }
+    button small { font-size: 0.7rem; opacity: 0.7; margin-top: 2px; font-weight: normal; }
+    button:active { background: #555; transform: scale(0.97); }
+
+    /* Button Colors */
+    .btn-ball { color: var(--ball); border-color: var(--ball); }
+    .btn-strike { color: var(--strike); border-color: var(--strike); }
+    .btn-out { color: var(--out); border-color: var(--out); }
+    .btn-hit { background: #2c3e50; border-color: #34495e; font-weight: bold; color: #fff; }
+    .btn-special { color: #aaa; }
+    .btn-undo { grid-column: span 1; background: #444; color: #fff; border-color: #666; }
+
+    /* Modals */
+    .modal {
+      display: none;
+      position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+      background: rgba(0,0,0,0.85);
+      z-index: 2000;
+      justify-content: center;
+      align-items: center;
+      backdrop-filter: blur(2px);
+    }
+    .modal.show { display: flex; }
+    .modal-content {
+      background: #222;
+      padding: 20px;
+      border-radius: 12px;
+      width: 95%;
+      max-width: 500px;
+      max-height: 90vh;
+      overflow-y: auto;
+      border: 1px solid #444;
+      display: flex;
+      flex-direction: column;
+    }
+    .modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; border-bottom: 1px solid #333; padding-bottom: 10px; }
+    .modal-header h2 { margin: 0; color: var(--accent); font-size: 1.3rem; }
+    .close-btn { background: none; border: none; color: #aaa; font-size: 1.8rem; padding: 0 10px; cursor: pointer; line-height: 1; }
+    .close-btn:hover { color: #fff; }
+    
+    .form-group { margin-bottom: 15px; }
+    .form-group label { display: block; margin-bottom: 5px; color: #ccc; }
+    .form-group input { width: 100%; padding: 10px; border-radius: 4px; border: 1px solid #444; background: #111; color: #fff; font-size: 1rem; }
+    .form-row { display: flex; gap: 10px; }
+    .btn-primary { background: var(--accent); color: #000; border: none; width: 100%; padding: 12px; font-weight: bold; margin-top: 10px; }
+
+    /* Stats Table */
+    .stats-table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 0.9rem; }
+    .stats-table th, .stats-table td { padding: 8px; text-align: center; border-bottom: 1px solid #333; }
+    .stats-table th { color: var(--text-muted); font-weight: normal; font-size: 0.8rem; }
+    .stats-table td:first-child { text-align: left; color: #fff; font-weight: bold; }
+    .stats-header-row th { color: var(--accent); font-weight: bold; font-size: 1rem; border-bottom: 2px solid #444; }
+
+    /* Desktop Layout */
+    @media (min-width: 768px) {
+      #app-container { flex-direction: row; max-width: 1200px; margin: 0 auto; box-shadow: 0 0 30px rgba(0,0,0,0.5); }
+      .left-col { flex: 1.5; display: flex; flex-direction: column; border-right: 1px solid var(--border); }
+      .right-col { flex: 1; display: flex; flex-direction: column; background: var(--panel-bg); }
+      .field-wrapper { flex: 1; min-height: 0; }
+      .controls { padding: 20px; gap: 10px; grid-template-columns: repeat(4, 1fr); }
+      .log-container { flex: 1; height: auto; border-bottom: 1px solid var(--border); border-top: none; }
+      header { display: none; }
+    }
+
+    /* Animations */
+    @keyframes scoreUpdate {
+      0% { transform: scale(1); }
+      50% { transform: scale(1.4); color: var(--accent); }
+      100% { transform: scale(1); }
+    }
+    .score-animate { animation: scoreUpdate 0.3s ease-out; }
+  </style>
+</head>
+<body>
+
+<!-- Setup Modal -->
+<div id="setupModal" class="modal show">
+  <div class="modal-content">
+    <div class="modal-header">
+      <h2>比賽設定</h2>
+      <!-- New Close Button -->
+      <button class="close-btn" onclick="app.closeModal('setupModal')">×</button>
+    </div>
+    <div class="form-group">
+      <div class="form-row">
+        <div style="flex:1">
+          <label>客隊 (先攻)</label>
+          <input type="text" id="inputAway" value="客隊">
+        </div>
+        <div style="flex:1">
+          <label>主隊 (後攻)</label>
+          <input type="text" id="inputHome" value="主隊">
+        </div>
+      </div>
+    </div>
+    <div class="form-group">
+      <label>總局數</label>
+      <input type="number" id="inputInnings" value="9" min="1" max="50">
+    </div>
+    <button class="btn-primary" onclick="app.startGame()">開始新比賽</button>
+  </div>
+</div>
+
+<!-- Stats Modal -->
+<div id="statsModal" class="modal">
+  <div class="modal-content">
+    <div class="modal-header">
+      <h2>比賽數據紀錄</h2>
+      <button class="close-btn" onclick="app.closeModal('statsModal')">×</button>
+    </div>
+    <div style="overflow-x: auto;">
+      <table class="stats-table">
+        <thead>
+          <tr class="stats-header-row">
+            <th>項目</th>
+            <th id="statHeaderAway">客隊</th>
+            <th id="statHeaderHome">主隊</th>
+          </tr>
+        </thead>
+        <tbody id="statsBody">
+          <!-- Populated by JS -->
+        </tbody>
+      </table>
+    </div>
+    <button class="btn-primary" onclick="app.closeModal('statsModal')">關閉</button>
+  </div>
+</div>
+
+<!-- Game Over Modal -->
+<div id="gameOverModal" class="modal">
+  <div class="modal-content" style="text-align: center;">
+    <h2>比賽結束</h2>
+    <h3 id="winnerText" style="color: var(--accent); font-size: 1.5rem; margin: 20px 0;"></h3>
+    <p id="finalScoreText" style="font-size: 1.2rem;"></p>
+    <button class="btn-primary" onclick="app.resetGame()">新比賽</button>
+    <button class="btn-primary" style="background:#444; color:#fff; margin-top:10px;" onclick="app.showStats()">檢視完整紀錄</button>
+  </div>
+</div>
+
+<div id="app-container">
+  <div class="left-col">
+    <!-- Header: Just Title -->
+    <header>
+      <h1 id="headerTitle">Baseball Pro</h1>
+    </header>
+
+    <!-- Scoreboard -->
+    <div class="scoreboard">
+      <div class="team-box">
+        <span class="team-name" id="labelAway">GUEST</span>
+        <div class="team-score" id="scoreAway">0</div>
+      </div>
+      
+      <div class="inning-box">
+        <div class="inning-num">
+          <div id="arrowTop" class="arrow-up"></div>
+          <span id="inningVal">1</span>
+          <div id="arrowBot" class="arrow-down" style="display:none;"></div>
+        </div>
+        <div class="outs-display" id="outsVal">0 OUT</div>
+      </div>
+
+      <div class="team-box">
+        <span class="team-name" id="labelHome">HOME</span>
+        <div class="team-score" id="scoreHome">0</div>
+      </div>
+    </div>
+
+    <!-- NEW: Tools Bar (Below Scoreboard, Above SBO) -->
+    <div class="tools-bar">
+      <button class="tool-btn" onclick="app.showStats()">📊 紀錄</button>
+      <button class="tool-btn" onclick="app.showSetup()">⚙️ 設定</button>
+    </div>
+
+    <!-- SBO Display -->
+    <div class="sbo-container">
+      <div class="sbo-group">
+        <span>B</span>
+        <div class="dot" id="b1"></div>
+        <div class="dot" id="b2"></div>
+        <div class="dot" id="b3"></div>
+      </div>
+      <div class="sbo-group">
+        <span>S</span>
+        <div class="dot" id="s1"></div>
+        <div class="dot" id="s2"></div>
+      </div>
+      <div class="sbo-group">
+        <span>O</span>
+        <div class="dot" id="o1"></div>
+        <div class="dot" id="o2"></div>
+      </div>
+    </div>
+
+    <!-- Field View -->
+    <div class="field-wrapper">
+      <svg class="diamond-svg" viewBox="0 0 200 200">
+        <!-- Diamond -->
+        <path d="M100 20 L180 100 L100 180 L20 100 Z" fill="none" stroke="rgba(255,255,255,0.3)" stroke-width="2" />
+        <path d="M100 180 L180 100" stroke="rgba(255,255,255,0.1)" stroke-width="1" />
+        <path d="M180 100 L100 20" stroke="rgba(255,255,255,0.1)" stroke-width="1" />
+        
+        <!-- Bases -->
+        <rect id="base1" class="base" x="170" y="90" width="20" height="20" transform="rotate(45 180 100)" onclick="app.toggleBase(1)" />
+        <rect id="base2" class="base" x="90" y="10" width="20" height="20" transform="rotate(45 100 20)" onclick="app.toggleBase(2)" />
+        <rect id="base3" class="base" x="10" y="90" width="20" height="20" transform="rotate(45 20 100)" onclick="app.toggleBase(3)" />
+        <path d="M90 180 L110 180 L110 190 L100 200 L90 190 Z" fill="#fff" />
+      </svg>
+    </div>
+  </div>
+
+  <div class="right-col">
+    <!-- Log -->
+    <div class="log-container" id="playLog">
+      <div class="log-item">比賽準備開始...</div>
+    </div>
+
+    <!-- Controls (4x4 Grid) -->
+    <div class="controls">
+      <!-- Row 1: Pitching -->
+      <button class="btn-strike" onclick="app.action('Strike')">好球<small>Strike</small></button>
+      <button class="btn-ball" onclick="app.action('Ball')">壞球<small>Ball</small></button>
+      <button class="btn-strike" onclick="app.action('Foul')">界外<small>Foul</small></button>
+      <button class="btn-ball" onclick="app.action('WP')">暴投<small>WP</small></button>
+      
+      <!-- Row 2: Outcomes/Outs -->
+      <button class="btn-out" onclick="app.action('GO')">滾地<small>Ground</small></button>
+      <button class="btn-out" onclick="app.action('FO')">高飛<small>Fly</small></button>
+      <button class="btn-run" onclick="app.action('SAC')">短打<small>Sac/Hit</small></button>
+      <button class="btn-run" onclick="app.action('Error')">失誤<small>Error</small></button>
+
+      <!-- Row 3: Hits -->
+      <button class="btn-hit" onclick="app.action('1B')">一安<small>1B</small></button>
+      <button class="btn-hit" onclick="app.action('2B')">二安<small>2B</small></button>
+      <button class="btn-hit" onclick="app.action('3B')">三安<small>3B</small></button>
+      <button class="btn-hit" onclick="app.action('HR')">全壘打<small>HR</small></button>
+
+      <!-- Row 4: Special & Undo -->
+      <button class="btn-run" onclick="app.action('HBP')">觸身<small>HBP</small></button>
+      <button class="btn-hit" onclick="app.action('GRD')">場地2B<small>Rule</small></button>
+      <button class="btn-undo" onclick="app.undo()" style="grid-column: span 2">↩ 復原上一步</button>
+    </div>
+  </div>
+</div>
+
+<script>
+  // --- Service Worker ---
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('./service-worker.js').catch(err => console.log('SW Fail', err));
+    });
+  }
+
+  // --- Game Logic ---
+  const app = {
+    state: {
+      inning: 1,
+      isTop: true,
+      outs: 0,
+      balls: 0,
+      strikes: 0,
+      score: { away: 0, home: 0 },
+      runners: [0, 0, 0],
+      history: [],
+      gameOver: false,
+      // Stats: PA=打席, AB=打數, H=安打, etc.
+      stats: {
+        away: { PA:0, AB:0, H:0, _1B:0, _2B:0, _3B:0, HR:0, BB:0, SO:0, GO:0, FO:0, HBP:0, SAC:0, E:0, Pitches:0, S:0, B:0 },
+        home: { PA:0, AB:0, H:0, _1B:0, _2B:0, _3B:0, HR:0, BB:0, SO:0, GO:0, FO:0, HBP:0, SAC:0, E:0, Pitches:0, S:0, B:0 }
+      }
+    },
+    config: {
+      maxInnings: 9,
+      teamAway: "客隊",
+      teamHome: "主隊"
+    },
+    ui: {},
+
+    init() {
+      const ids = ['scoreAway', 'scoreHome', 'inningVal', 'outsVal', 'arrowTop', 'arrowBot', 
+                   'b1', 'b2', 'b3', 's1', 's2', 'o1', 'o2', 
+                   'base1', 'base2', 'base3', 'playLog', 
+                   'labelAway', 'labelHome', 'setupModal', 'gameOverModal', 'statsModal', 'winnerText', 'finalScoreText', 
+                   'inputAway', 'inputHome', 'inputInnings', 'statHeaderAway', 'statHeaderHome', 'statsBody'];
+      ids.forEach(id => this.ui[id] = document.getElementById(id));
+      this.updateUI();
+    },
+
+    showSetup() { this.ui.setupModal.classList.add('show'); },
+    
+    showStats() { 
+      this.renderStats();
+      this.ui.statsModal.classList.add('show'); 
+    },
+    
+    closeModal(id) { document.getElementById(id).classList.remove('show'); },
+
+    startGame() {
+      this.config.teamAway = this.ui.inputAway.value || "客隊";
+      this.config.teamHome = this.ui.inputHome.value || "主隊";
+      this.config.maxInnings = parseInt(this.ui.inputInnings.value) || 9;
+      this.ui.labelAway.textContent = this.config.teamAway;
+      this.ui.labelHome.textContent = this.config.teamHome;
+      this.ui.statHeaderAway.textContent = this.config.teamAway;
+      this.ui.statHeaderHome.textContent = this.config.teamHome;
+      
+      this.resetGameData();
+      
+      // Clear Log visually
+      this.ui.playLog.innerHTML = '<div class="log-item" style="color:var(--accent);font-weight:bold;">比賽開始！</div>';
+      
+      this.closeModal('setupModal');
+      this.updateUI();
+    },
+
+    resetGame() {
+      this.ui.gameOverModal.classList.remove('show');
+      this.showSetup();
+    },
+    
+    resetGameData() {
+      this.state = {
+        inning: 1, isTop: true, outs: 0, balls: 0, strikes: 0,
+        score: { away: 0, home: 0 }, runners: [0, 0, 0], history: [], gameOver: false,
+        stats: {
+          away: { PA:0, AB:0, H:0, _1B:0, _2B:0, _3B:0, HR:0, BB:0, SO:0, GO:0, FO:0, HBP:0, SAC:0, E:0, Pitches:0, S:0, B:0 },
+          home: { PA:0, AB:0, H:0, _1B:0, _2B:0, _3B:0, HR:0, BB:0, SO:0, GO:0, FO:0, HBP:0, SAC:0, E:0, Pitches:0, S:0, B:0 }
+        }
+      };
+    },
+
+    // Get current offensive and defensive stats objects
+    getStats() {
+      const off = this.state.isTop ? this.state.stats.away : this.state.stats.home;
+      const def = this.state.isTop ? this.state.stats.home : this.state.stats.away;
+      return { off, def };
+    },
+
+    action(type) {
+      if (this.state.gameOver) return;
+      this.saveState();
+      
+      const s = this.state;
+      const { off, def } = this.getStats();
+      let msg = "";
+
+      // Logic Handlers
+      switch (type) {
+        case 'Ball':
+          s.balls++;
+          def.Pitches++; def.B++;
+          msg = "壞球";
+          if (s.balls >= 4) {
+            msg = "四壞球保送";
+            off.PA++; off.BB++;
+            this.advanceRunners('BB');
+            this.resetCount();
+          }
+          break;
+
+        case 'Strike':
+          s.strikes++;
+          def.Pitches++; def.S++;
+          msg = "好球";
+          if (s.strikes >= 3) {
+            msg = "三振出局";
+            off.PA++; off.AB++; off.SO++;
+            this.addOut();
+          }
+          break;
+
+        case 'Foul':
+          if (s.strikes < 2) { s.strikes++; def.S++; }
+          def.Pitches++;
+          msg = "界外";
+          break;
+
+        case 'WP':
+          // Wild Pitch: Adds ball + Runners advance
+          s.balls++;
+          def.Pitches++; def.B++;
+          msg = "暴投 (壘包推進)";
+          // Advance all runners 1 base, check for walk
+          this.advanceRunners('WP_ALL'); 
+          if (s.balls >= 4) {
+             msg = "暴投 (四壞保送)";
+             off.PA++; off.BB++;
+             this.advanceRunners('BB'); // Handle the walk portion (force)
+             this.resetCount();
+          }
+          break;
+
+        case 'GO':
+          msg = "滾地出局";
+          def.Pitches++; // Pitch thrown
+          off.PA++; off.AB++; off.GO++;
+          this.addOut();
+          break;
+        
+        case 'FO':
+          msg = "高飛出局";
+          def.Pitches++; // Pitch thrown
+          off.PA++; off.AB++; off.FO++;
+          this.addOut();
+          break;
+
+        case '1B':
+          msg = "一壘安打";
+          def.Pitches++; // Pitch thrown
+          off.PA++; off.AB++; off.H++; off._1B++;
+          this.advanceRunners(1);
+          this.resetCount();
+          break;
+
+        case '2B':
+          msg = "二壘安打";
+          def.Pitches++; // Pitch thrown
+          off.PA++; off.AB++; off.H++; off._2B++;
+          this.advanceRunners(2);
+          this.resetCount();
+          break;
+
+        case '3B':
+          msg = "三壘安打";
+          def.Pitches++; // Pitch thrown
+          off.PA++; off.AB++; off.H++; off._3B++;
+          this.advanceRunners(3);
+          this.resetCount();
+          break;
+
+        case 'HR':
+          msg = "全壘打！";
+          def.Pitches++; // Pitch thrown
+          off.PA++; off.AB++; off.H++; off.HR++;
+          this.advanceRunners(4);
+          this.resetCount();
+          break;
+        
+        case 'GRD':
+          msg = "場地規則二壘安打";
+          def.Pitches++; // Pitch thrown
+          off.PA++; off.AB++; off.H++; off._2B++;
+          // Ground rule double: Everyone advances 2 bases
+          this.advanceRunners(2); 
+          this.resetCount();
+          break;
+
+        case 'HBP':
+          msg = "觸身球";
+          def.Pitches++; // Pitch thrown
+          off.PA++; off.HBP++;
+          this.advanceRunners('BB'); 
+          this.resetCount();
+          break;
+          
+        case 'Error':
+          msg = "失誤上壘";
+          def.Pitches++; // Assume pitch thrown for ball in play error
+          off.PA++; off.AB++; off.E++; 
+          this.advanceRunners(1); 
+          this.resetCount();
+          break;
+        
+        case 'SAC':
+           msg = "短打/犧牲打";
+           def.Pitches++; // Pitch thrown
+           off.PA++; off.SAC++;
+           this.addOut(false);
+           if (s.outs < 3) {
+             this.advanceRunners('SAC_ADVANCE');
+           }
+           this.resetCount();
+           break;
+      }
+
+      if (msg) this.log(msg);
+      this.checkGameStatus();
+      this.updateUI();
+    },
+
+    // --- Core Logic ---
+
+    addOut(resetCt = true) {
+      this.state.outs++;
+      if (resetCt) this.resetCount();
+      if (this.state.outs >= 3) {
+        this.log("三人出局，換邊");
+        this.switchSides();
+      }
+    },
+
+    resetCount() {
+      this.state.balls = 0;
+      this.state.strikes = 0;
+    },
+
+    switchSides() {
+      const s = this.state;
+      const cfg = this.config;
+      
+      // Check End of Bottom Inning
+      if (!s.isTop) {
+        if (s.inning >= cfg.maxInnings && s.score.home !== s.score.away) {
+            this.endGame(s.score.home > s.score.away ? cfg.teamHome : cfg.teamAway);
+            return;
+        }
+      }
+
+      s.outs = 0;
+      s.runners = [0, 0, 0];
+      this.resetCount();
+
+      if (s.isTop) {
+        // Top -> Bottom
+        // If Home leading after Top of Last Inning, Game Over
+        if (s.inning >= cfg.maxInnings && s.score.home > s.score.away) {
+             this.endGame(cfg.teamHome);
+             return;
+        }
+        s.isTop = false;
+      } else {
+        s.isTop = true;
+        s.inning++;
+      }
+    },
+
+    advanceRunners(type) {
+      const s = this.state;
+      let scored = 0;
+      let newRunners = [...s.runners]; // Copy
+
+      if (type === 'BB') {
+        // Forced only
+        if (s.runners[0] && s.runners[1] && s.runners[2]) { scored++; }
+        else if (s.runners[0] && s.runners[1]) { s.runners[2] = 1; }
+        else if (s.runners[0]) { s.runners[1] = 1; }
+        s.runners[0] = 1;
+      } 
+      else if (type === 'WP_ALL' || type === 'SAC_ADVANCE') {
+        // Advance everyone 1 base, Batter stays (WP) or is out (SAC)
+        // Process from 3rd base down to 1st
+        newRunners = [0, 0, 0];
+        if (s.runners[2]) scored++;
+        if (s.runners[1]) newRunners[2] = 1;
+        if (s.runners[0]) newRunners[1] = 1;
+        
+        // For WP, batter is still at plate (handled by count)
+        // For SAC, batter is out (handled by action)
+        s.runners = newRunners;
+      }
+      else if (typeof type === 'number') {
+        newRunners = [0, 0, 0];
+        // Move existing
+        for (let i = 2; i >= 0; i--) {
+          if (s.runners[i]) {
+            let dest = i + 1 + type; 
+            if (dest > 3) scored++; else newRunners[dest - 1] = 1;
+          }
+        }
+        // Batter
+        if (type === 4) scored++; else newRunners[type - 1] = 1;
+        s.runners = newRunners;
+      }
+
+      if (scored > 0) this.addScore(scored);
+    },
+
+    addScore(amount) {
+      if (this.state.isTop) this.state.score.away += amount;
+      else this.state.score.home += amount;
+      
+      const id = this.state.isTop ? 'scoreAway' : 'scoreHome';
+      const el = this.ui[id];
+      el.classList.remove('score-animate');
+      void el.offsetWidth;
+      el.classList.add('score-animate');
+      this.log(`得分 +${amount}`);
+    },
+
+    checkGameStatus() {
+      const s = this.state;
+      const cfg = this.config;
+      // Walk-off
+      if (!s.isTop && s.inning >= cfg.maxInnings && s.score.home > s.score.away) {
+        this.endGame(cfg.teamHome);
+      }
+    },
+
+    endGame(winner) {
+      this.state.gameOver = true;
+      this.ui.winnerText.textContent = `${winner} 獲勝!`;
+      this.ui.finalScoreText.textContent = `${this.config.teamAway} ${this.state.score.away} - ${this.state.score.home} ${this.config.teamHome}`;
+      this.ui.gameOverModal.classList.add('show');
+    },
+
+    saveState() {
+      this.state.history.push(JSON.parse(JSON.stringify(this.state)));
+      if (this.state.history.length > 50) this.state.history.shift();
+    },
+
+    undo() {
+      if (this.state.history.length === 0) return;
+      const prev = this.state.history.pop();
+      const currentHistory = this.state.history;
+      this.state = prev;
+      this.state.history = currentHistory;
+      this.log("--- 復原操作 ---");
+      this.updateUI();
+    },
+
+    toggleBase(baseIdx) {
+      if (this.state.gameOver) return;
+      this.saveState();
+      this.state.runners[baseIdx - 1] = this.state.runners[baseIdx - 1] ? 0 : 1;
+      this.updateUI();
+    },
+
+    renderStats() {
+      const sa = this.state.stats.away;
+      const sh = this.state.stats.home;
+      
+      const rows = [
+        ["用球數 (Pitches)", sa.Pitches, sh.Pitches],
+        ["好球 (Strikes)", sa.S, sh.S],
+        ["壞球 (Balls)", sa.B, sh.B],
+        ["-- 打擊數據 --", "", ""],
+        ["打席 (PA)", sa.PA, sh.PA],
+        ["安打 (Hits)", sa.H, sh.H],
+        ["一壘安打 (1B)", sa._1B, sh._1B],
+        ["二壘安打 (2B)", sa._2B, sh._2B],
+        ["三壘安打 (3B)", sa._3B, sh._3B],
+        ["全壘打 (HR)", sa.HR, sh.HR],
+        ["四壞保送 (BB)", sa.BB, sh.BB],
+        ["觸身球 (HBP)", sa.HBP, sh.HBP],
+        ["三振 (SO)", sa.SO, sh.SO],
+        ["滾地出局 (GO)", sa.GO, sh.GO],
+        ["高飛出局 (FO)", sa.FO, sh.FO],
+        ["犧牲短打 (Sac)", sa.SAC, sh.SAC],
+        ["對手失誤 (Err)", sa.E, sh.E] // Errors by opponent committed AGAINST this team? No, stats usually track what team DID. But usually "reached on error". Let's simply show Errors committed by team or Reached on Error? "Error" button adds to Offense E counter (reached on error).
+      ];
+      
+      let html = "";
+      rows.forEach(r => {
+        const isHeader = r[0].startsWith("--");
+        if(isHeader) {
+           html += `<tr style="background:#333"><td colspan="3" style="text-align:center;color:#ccc;font-size:0.8rem">${r[0]}</td></tr>`;
+        } else {
+           html += `<tr><td>${r[0]}</td><td>${r[1]}</td><td>${r[2]}</td></tr>`;
+        }
+      });
+      this.ui.statsBody.innerHTML = html;
+    },
+
+    log(text) {
+      const div = document.createElement('div');
+      div.className = 'log-item';
+      const innStr = `${this.state.inning}${this.state.isTop ? '上' : '下'}`;
+      div.textContent = `[${innStr}] ${text}`;
+      this.ui.playLog.insertBefore(div, this.ui.playLog.firstChild);
+    },
+
+    updateUI() {
+      const s = this.state;
+      this.ui.scoreAway.textContent = s.score.away;
+      this.ui.scoreHome.textContent = s.score.home;
+      this.ui.inningVal.textContent = s.inning;
+      this.ui.arrowTop.style.display = s.isTop ? 'block' : 'none';
+      this.ui.arrowBot.style.display = !s.isTop ? 'block' : 'none';
+      this.ui.outsVal.textContent = `${s.outs} OUT`;
+
+      ['b1','b2','b3'].forEach((id,i) => this.ui[id].classList.toggle('active-b', s.balls > i));
+      ['s1','s2'].forEach((id,i) => this.ui[id].classList.toggle('active-s', s.strikes > i));
+      ['o1','o2'].forEach((id,i) => this.ui[id].classList.toggle('active-o', s.outs > i));
+
+      this.ui.base1.classList.toggle('occupied', s.runners[0] === 1);
+      this.ui.base2.classList.toggle('occupied', s.runners[1] === 1);
+      this.ui.base3.classList.toggle('occupied', s.runners[2] === 1);
+    }
+  };
+
+  window.addEventListener('DOMContentLoaded', () => app.init());
+</script>
+</body>
+</html>
